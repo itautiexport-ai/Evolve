@@ -279,7 +279,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
             <table className="admin-table">
               <thead>
                 <tr>
-                  <th>Id</th>
+                  <th>ID</th>
                   <th>Title</th>
                   <th>Category</th>
                   <th>Priority</th>
