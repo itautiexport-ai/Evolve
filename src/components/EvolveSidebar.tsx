@@ -224,7 +224,7 @@ export const EvolveSidebar: React.FC<EvolveSidebarProps> = ({
                 className={`sidebar-sub-item ${activeNav === 'goals-vision' ? 'active' : ''}`}
               >
                 <Sparkles size={15} className="sub-nav-icon" />
-                <span className="sub-item-label">Vision Board</span>
+                <span className="sub-item-label">Create Vision Board</span>
               </button>
             </div>
           )}

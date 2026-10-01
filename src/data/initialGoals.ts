@@ -5,7 +5,7 @@ export const INITIAL_GOALS: Goal[] = [
     id: 'goal-1',
     title: 'Achieve Financial Freedom & Investment Portfolio',
     description: 'Build a diversified passive income portfolio across stocks, index funds, and real estate assets.',
-    category: 'Financial Freedom',
+    category: 'Money & Finances',
     priority: 'critical',
     status: 'in-progress',
     targetDate: '2027-12-31',
@@ -91,7 +91,7 @@ export const INITIAL_GOALS: Goal[] = [
     id: 'goal-4',
     title: 'Explore Northern Lights in Iceland & Japan Cherry Blossoms',
     description: 'Experience world wonders: view Aurora Borealis from a glass igloo in Iceland and witness Sakura season in Kyoto.',
-    category: 'Travel & Adventure',
+    category: 'Fun & Recreation',
     priority: 'medium',
     status: 'not-started',
     targetDate: '2027-04-15',
@@ -114,7 +114,7 @@ export const INITIAL_GOALS: Goal[] = [
     id: 'goal-5',
     title: 'Master Mindful Daily Meditation & Read 24 Books',
     description: 'Cultivate mental clarity, emotional resilience, and deep knowledge by reading 2 books per month and practicing 15min daily meditation.',
-    category: 'Personal Growth',
+    category: 'Personal Growth & Learning',
     priority: 'medium',
     status: 'in-progress',
     targetDate: '2026-12-31',
@@ -144,13 +144,16 @@ export const INITIAL_GOALS: Goal[] = [
 ];
 
 export const CATEGORIES_WITH_META = [
-  { name: 'Financial Freedom', icon: 'DollarSign', color: '#facc15', gradient: 'from-amber-300 to-yellow-400' },
-  { name: 'Career & Work', icon: 'Briefcase', color: '#c084fc', gradient: 'from-purple-300 to-indigo-400' },
-  { name: 'Health & Fitness', icon: 'Activity', color: '#6ee7b7', gradient: 'from-emerald-300 to-teal-400' },
-  { name: 'Personal Growth', icon: 'BookOpen', color: '#fda4af', gradient: 'from-pink-300 to-rose-400' },
-  { name: 'Travel & Adventure', icon: 'Compass', color: '#7dd3fc', gradient: 'from-sky-300 to-blue-400' },
-  { name: 'Relationships & Family', icon: 'Heart', color: '#f472b6', gradient: 'from-rose-300 to-pink-400' },
-  { name: 'Mindfulness & Wellbeing', icon: 'Smile', color: '#a78bfa', gradient: 'from-violet-300 to-purple-400' },
+  { name: 'Spirituality', icon: 'Sparkles', color: '#a78bfa', gradient: 'from-violet-300 to-purple-400' },
+  { name: 'Money & Finances', icon: 'DollarSign', color: '#facc15', gradient: 'from-amber-300 to-yellow-400' },
+  { name: 'Career & Work', icon: 'Briefcase', color: '#3b82f6', gradient: 'from-blue-300 to-blue-400' },
+  { name: 'Health & Fitness', icon: 'Activity', color: '#ef4444', gradient: 'from-red-300 to-red-400' },
+  { name: 'Fun & Recreation', icon: 'Compass', color: '#f97316', gradient: 'from-orange-300 to-orange-400' },
+  { name: 'Environment', icon: 'Home', color: '#10b981', gradient: 'from-green-300 to-emerald-400' },
+  { name: 'Community', icon: 'Globe', color: '#06b6d4', gradient: 'from-cyan-300 to-sky-400' },
+  { name: 'Family & Friends', icon: 'Users', color: '#ec4899', gradient: 'from-pink-300 to-rose-400' },
+  { name: 'Partner & Love', icon: 'Heart', color: '#f43f5e', gradient: 'from-rose-300 to-pink-400' },
+  { name: 'Personal Growth & Learning', icon: 'BookOpen', color: '#8b5cf6', gradient: 'from-violet-300 to-purple-400' },
 ];
 
 export const MOTIVATIONAL_QUOTES = [

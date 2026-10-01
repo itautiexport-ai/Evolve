@@ -1,10 +1,14 @@
 export type HabitCategory =
+  | 'Spirituality'
+  | 'Money & Finances'
+  | 'Career & Work'
   | 'Health & Fitness'
-  | 'Productivity'
-  | 'Personal Growth'
-  | 'Mindfulness & Wellbeing'
-  | 'Relationships'
-  | 'Financial';
+  | 'Fun & Recreation'
+  | 'Environment'
+  | 'Community'
+  | 'Family & Friends'
+  | 'Partner & Love'
+  | 'Personal Growth & Learning';
 
 export interface Habit {
   id: string;

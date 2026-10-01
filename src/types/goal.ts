@@ -1,11 +1,14 @@
 export type Category = 
+  | 'Spirituality'
+  | 'Money & Finances'
   | 'Career & Work'
   | 'Health & Fitness'
-  | 'Financial Freedom'
-  | 'Personal Growth'
-  | 'Travel & Adventure'
-  | 'Relationships & Family'
-  | 'Mindfulness & Wellbeing';
+  | 'Fun & Recreation'
+  | 'Environment'
+  | 'Community'
+  | 'Family & Friends'
+  | 'Partner & Love'
+  | 'Personal Growth & Learning';
 
 export type Priority = 'low' | 'medium' | 'high' | 'critical';
 

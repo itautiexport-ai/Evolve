@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { EvolveLogo } from './EvolveLogo';
 import { DailyAffirmation } from './DailyAffirmation';
 import type { User, MasterItem, Goal } from '../types/goal';
+import { Trophy } from 'lucide-react';
 // Unused icon imports removed to prevent lint errors
 
 const MOTIVATIONAL_QUOTES = [
@@ -36,6 +37,21 @@ export const EvolveHomePage: React.FC<EvolveHomePageProps> = ({
   const [timeString, setTimeString] = useState('');
   const [greeting, setGreeting] = useState('Happy Morning!');
   const [greetingEmoji, setGreetingEmoji] = useState('🌅');
+  const [accomplishedManifestations, setAccomplishedManifestations] = useState<any[]>([]);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('evolve_manifestation_module_v3');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.accomplishedList) {
+          setAccomplishedManifestations(parsed.accomplishedList);
+        }
+      } catch (e) {
+        console.error("Failed to load accomplishments on home page:", e);
+      }
+    }
+  }, []);
 
   // Determine Quote of the Day dynamically based on the current day of the year
   const [quoteOfTheDay] = useState(() => {
@@ -125,6 +141,32 @@ export const EvolveHomePage: React.FC<EvolveHomePageProps> = ({
 
       {/* Daily Affirmation Video Section */}
       <DailyAffirmation />
+
+      {/* Wall of Fame: Accomplished Dreams Grid */}
+      {accomplishedManifestations.length > 0 && (
+        <div className="homepage-wall-of-fame animate-fade-in">
+          <h2 className="homepage-wall-title">
+            <Trophy className="wall-trophy-icon" size={24} />
+            <span>Wall of Fame: Accomplished Dreams</span>
+          </h2>
+          <div className="homepage-wall-grid">
+            {accomplishedManifestations.map((item, index) => (
+              <div key={index} className="homepage-wall-card pinterest-polaroid-card">
+                <div className="pinterest-pushpin gold" style={{ top: '-10px' }} />
+                <div className="wall-card-img-container">
+                  <img src={item.imageUrl} alt={item.title} className="wall-card-img" />
+                </div>
+                <div className="wall-card-body">
+                  <h3 className="wall-card-title">"{item.title}"</h3>
+                  <div className="wall-card-pill">
+                    Achieved in {item.daysToAchieve} {item.daysToAchieve === 1 ? 'day' : 'days'}! 🏆
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -56,13 +56,16 @@ export const GoalCard: React.FC<GoalCardProps> = ({
   }[goal.priority];
 
   const categoryColor = {
-    'Financial Freedom': 'cat-emerald',
+    'Spirituality': 'cat-purple',
+    'Money & Finances': 'cat-emerald',
     'Career & Work': 'cat-blue',
     'Health & Fitness': 'cat-red',
-    'Personal Growth': 'cat-purple',
-    'Travel & Adventure': 'cat-amber',
-    'Relationships & Family': 'cat-pink',
-    'Mindfulness & Wellbeing': 'cat-cyan',
+    'Fun & Recreation': 'cat-amber',
+    'Environment': 'cat-cyan',
+    'Community': 'cat-emerald',
+    'Family & Friends': 'cat-pink',
+    'Partner & Love': 'cat-pink',
+    'Personal Growth & Learning': 'cat-purple',
   }[goal.category] || 'cat-blue';
 
   const daysLeft = Math.ceil(

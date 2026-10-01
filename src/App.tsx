@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { Goal, MasterItem, User, JournalEntry } from './types/goal';
 import type { Habit } from './types/habit';
-import { INITIAL_MASTERS } from './data/initialMasters';
-import { INITIAL_GOALS } from './data/initialGoals';
-import { DEFAULT_ADMIN_USER, DEFAULT_REGULAR_USER } from './data/authData';
+import { authApi, goalsApi, habitsApi, mastersApi, setAuthToken, clearAuthToken } from './services/api';
 import { EvolveSidebar } from './components/EvolveSidebar';
 import { EvolveHeader } from './components/EvolveHeader';
 import { EvolveHomePage } from './components/EvolveHomePage';
@@ -14,20 +12,21 @@ import { EvolveGratitudeView } from './components/EvolveGratitudeView';
 import { MyGoalsView } from './components/MyGoalsView';
 import { MyGoalsHomeView } from './components/MyGoalsHomeView';
 import { VisionBoardView } from './components/VisionBoardView';
+import { ManifestationView } from './components/ManifestationView';
 import { MusicPlayerView } from './components/MusicPlayerView';
 import { MyHabitTrackerView } from './components/MyHabitTrackerView';
 import { AuthModal } from './components/AuthModal';
 import { JournalModal } from './components/JournalModal';
 import { HabitsDashboardView } from './components/HabitsDashboardView';
 import { OverallDashboardView } from './components/OverallDashboardView';
-import { ShieldAlert, Mail, Lock, ShieldCheck, Key, Zap } from 'lucide-react';
+import { ShieldAlert, Mail, Lock, ShieldCheck } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
-const MASTERS_STORAGE = 'evolve_masters_v3';
-const GOALS_STORAGE = 'evolve_goals_v3';
+// const MASTERS_STORAGE = 'evolve_masters_v3';
+// const GOALS_STORAGE = 'evolve_goals_v3';
 const USER_STORAGE = 'evolve_user_v3';
 const USERS_STORAGE = 'evolve_users_v3';
-const HABITS_STORAGE = 'evolve_habits_v3';
+// const HABITS_STORAGE = 'evolve_habits_v3';
 
 // Daily Streak Calculation helper
 const calculateStreak = (history: { [dateStr: string]: boolean }, _frequency: 'daily' | 'weekly' | 'monthly'): number => {
@@ -111,6 +110,8 @@ export const App: React.FC = () => {
   }, [currentUser]);
 
   // Users List (Defaults to Admin ID only, filters out example user USER-002)
+  // NOTE: This is temporary local-only data. The "Manage Users" feature 
+  // will be connected to the backend in a later phase.
   const [users, setUsers] = useState<User[]>(() => {
     const saved = localStorage.getItem(USERS_STORAGE);
     if (saved) {
@@ -120,7 +121,13 @@ export const App: React.FC = () => {
       } catch (e) { console.error(e); }
     }
     return [
-      { ...DEFAULT_ADMIN_USER, name: 'Admin ID', id: 'CRM0001' }
+      {
+        id: 'CRM0001',
+        name: 'Admin ID',
+        email: 'admin@evolve.local',
+        role: 'ADMIN',
+        joinedDate: new Date().toISOString().split('T')[0],
+      }
     ];
   });
 
@@ -129,89 +136,14 @@ export const App: React.FC = () => {
     localStorage.setItem(USERS_STORAGE, JSON.stringify(users));
   }, [users]);
 
-  // Masters List
-  const [masters] = useState<MasterItem[]>(() => {
-    const saved = localStorage.getItem(MASTERS_STORAGE);
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
-    }
-    return INITIAL_MASTERS;
-  });
+  // Masters List (loaded from API after login)
+  const [masters, setMasters] = useState<MasterItem[]>([]);
 
-  // Goals List
-  const [goals, setGoals] = useState<Goal[]>(() => {
-    const saved = localStorage.getItem(GOALS_STORAGE);
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
-    }
-    return INITIAL_GOALS;
-  });
+  // Goals List (loaded from API after login)
+  const [goals, setGoals] = useState<Goal[]>([]);
 
-  // Habits List
-  const [habits, setHabits] = useState<Habit[]>(() => {
-    const saved = localStorage.getItem(HABITS_STORAGE);
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
-    }
-    
-    // Generate dates dynamically for sample habits to maintain fresh streaks on first load!
-    const getPastDateStr = (daysAgo: number) => {
-      const d = new Date();
-      d.setDate(d.getDate() - daysAgo);
-      const offset = d.getTimezoneOffset();
-      const local = new Date(d.getTime() - (offset * 60 * 1000));
-      return local.toISOString().split('T')[0];
-    };
-
-    return [
-      {
-        id: 'habit-1',
-        name: 'Drink 3L of Water',
-        description: 'Stay hydrated to maintain high cognitive energy and focus.',
-        frequency: 'daily',
-        category: 'Health & Fitness',
-        streak: 5,
-        bestStreak: 12,
-        history: {
-          [getPastDateStr(0)]: true,
-          [getPastDateStr(1)]: true,
-          [getPastDateStr(2)]: true,
-          [getPastDateStr(3)]: true,
-          [getPastDateStr(4)]: true,
-        },
-        createdAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
-      },
-      {
-        id: 'habit-2',
-        name: 'Morning Mindfulness',
-        description: '10 minutes of box breathing and grounding before starting work.',
-        frequency: 'daily',
-        category: 'Mindfulness & Wellbeing',
-        streak: 3,
-        bestStreak: 7,
-        history: {
-          [getPastDateStr(0)]: true,
-          [getPastDateStr(1)]: true,
-          [getPastDateStr(2)]: true,
-        },
-        createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
-      },
-      {
-        id: 'habit-3',
-        name: 'Read 10 Pages',
-        description: 'Read a chapter of a non-fiction book to learn something new.',
-        frequency: 'daily',
-        category: 'Personal Growth',
-        streak: 0,
-        bestStreak: 15,
-        history: {
-          [getPastDateStr(1)]: true,
-          [getPastDateStr(2)]: true,
-        },
-        createdAt: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString(),
-      }
-    ];
-  });
+  // Habits List (loaded from API after login)
+  const [habits, setHabits] = useState<Habit[]>([]);
 
   // Modal States
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -221,111 +153,133 @@ export const App: React.FC = () => {
   const [isJournalModalOpen, setIsJournalModalOpen] = useState(false);
 
   // Goal Save Handler (handles both Create and Update)
-  const handleSaveGoal = (goalData: Partial<Goal>) => {
-    if (goalData.id) {
-      // Edit mode
-      setGoals(prev => prev.map(g => g.id === goalData.id ? { ...g, ...goalData } as Goal : g));
-    } else {
-      // Add mode
-      const newGoal: Goal = {
-        ...goalData,
-        id: 'goal-' + Date.now(),
-        status: 'active',
-        isPinned: false,
-        journalEntries: [],
-        progress: goalData.progress || 0,
-      } as Goal;
-      setGoals(prev => [...prev, newGoal]);
+  const handleSaveGoal = async (goalData: Partial<Goal>) => {
+    try {
+      if (goalData.id) {
+        // Edit mode
+        const updated = await goalsApi.update(goalData.id, goalData);
+        setGoals(prev => prev.map(g => g.id === goalData.id ? { ...g, ...updated } as Goal : g));
+      } else {
+        // Add mode
+        const newGoalData = {
+          ...goalData,
+          status: goalData.status || 'active',
+          isPinned: false,
+          progress: goalData.progress || 0,
+        };
+        const created = await goalsApi.create(newGoalData);
+        setGoals(prev => [...prev, { ...created, milestones: [], journalEntries: [] } as Goal]);
+      }
+    } catch (err) {
+      console.error("Failed to save goal:", err);
     }
   };
 
   // Goal Delete Handler
-  const handleDeleteGoal = (id: string) => {
-    setGoals(prev => prev.filter(g => g.id !== id));
+  const handleDeleteGoal = async (id: string) => {
+    try {
+      await goalsApi.delete(id);
+      setGoals(prev => prev.filter(g => g.id !== id));
+    } catch (err) {
+      console.error("Failed to delete goal:", err);
+    }
   };
 
 
 
   // Update Goal Status directly
-  const handleUpdateStatus = (goalId: string, newStatus: Goal['status']) => {
-    setGoals(prev => prev.map(g => g.id === goalId ? { ...g, status: newStatus } : g));
-  };
-
-  // Add Reflection Journal Entry to Goal
-  const handleAddJournalEntry = (goalId: string, entry: Omit<JournalEntry, 'id'>) => {
-    const newEntry: JournalEntry = {
-      ...entry,
-      id: 'journal-' + Date.now(),
-    };
-    setGoals(prev => prev.map(g => {
-      if (g.id !== goalId) return g;
-      const currentEntries = g.journalEntries || [];
-      return {
-        ...g,
-        journalEntries: [...currentEntries, newEntry]
-      };
-    }));
-    // Also update current active journal view so it updates instantly in the modal
-    setSelectedGoalForJournal(prev => {
-      if (!prev || prev.id !== goalId) return prev;
-      return {
-        ...prev,
-        journalEntries: [...(prev.journalEntries || []), newEntry]
-      };
-    });
-  };
-
-  // Habit Event Handlers
-  const handleToggleHabit = (habitId: string, dateStr: string) => {
-    setHabits(prev => prev.map(h => {
-      if (h.id !== habitId) return h;
-      
-      const newHistory = { ...h.history };
-      if (newHistory[dateStr]) {
-        delete newHistory[dateStr];
-      } else {
-        newHistory[dateStr] = true;
-      }
-      
-      const currentStreak = calculateStreak(newHistory, h.frequency);
-      const bestStreak = Math.max(h.bestStreak || 0, currentStreak);
-      
-      return {
-        ...h,
-        history: newHistory,
-        streak: currentStreak,
-        bestStreak
-      };
-    }));
-  };
-
-  const handleSaveHabit = (habitData: Partial<Habit>) => {
-    if (habitData.id) {
-      setHabits(prev => prev.map(h => {
-        if (h.id !== habitData.id) return h;
-        return {
-          ...h,
-          ...habitData,
-        } as Habit;
-      }));
-    } else {
-      const newHabit: Habit = {
-        id: 'habit-' + Date.now(),
-        name: habitData.name || '',
-        description: habitData.description || '',
-        category: habitData.category || 'Health & Fitness',
-        frequency: habitData.frequency || 'daily',
-        streak: 0,
-        bestStreak: 0,
-        history: {},
-        createdAt: new Date().toISOString(),
-      };
-      setHabits(prev => [...prev, newHabit]);
+  const handleUpdateStatus = async (goalId: string, newStatus: Goal['status']) => {
+    const goal = goals.find(g => g.id === goalId);
+    if (!goal) return;
+    try {
+      await goalsApi.update(goalId, { ...goal, status: newStatus });
+      setGoals(prev => prev.map(g => g.id === goalId ? { ...g, status: newStatus } : g));
+    } catch (err) {
+      console.error("Failed to update goal status:", err);
     }
   };
 
-  const handleDeleteHabit = (id: string) => {
-    setHabits(prev => prev.filter(h => h.id !== id));
+  // Add Reflection Journal Entry to Goal
+  const handleAddJournalEntry = async (goalId: string, entry: Omit<JournalEntry, 'id'>) => {
+    try {
+      const created = await goalsApi.addJournalEntry(goalId, entry.content, entry.mood, entry.date);
+      const newEntry: JournalEntry = { ...entry, id: created.id };
+      setGoals(prev => prev.map(g => {
+        if (g.id !== goalId) return g;
+        const currentEntries = g.journalEntries || [];
+        return {
+          ...g,
+          journalEntries: [...currentEntries, newEntry]
+        };
+      }));
+      setSelectedGoalForJournal(prev => {
+        if (!prev || prev.id !== goalId) return prev;
+        return {
+          ...prev,
+          journalEntries: [...(prev.journalEntries || []), newEntry]
+        };
+      });
+    } catch (err) {
+      console.error("Failed to add journal entry:", err);
+    }
+  };
+
+  // Habit Event Handlers
+  const handleToggleHabit = async (habitId: string, dateStr: string) => {
+    const habit = habits.find(h => h.id === habitId);
+    if (!habit) return;
+
+    const isCurrentlyDone = !!habit.history[dateStr];
+    const newHistory = { ...habit.history };
+    if (isCurrentlyDone) {
+      delete newHistory[dateStr];
+    } else {
+      newHistory[dateStr] = true;
+    }
+    const currentStreak = calculateStreak(newHistory, habit.frequency);
+    const bestStreak = Math.max(habit.bestStreak || 0, currentStreak);
+
+    try {
+      await habitsApi.setHistory(habitId, dateStr, !isCurrentlyDone);
+      await habitsApi.update(habitId, { ...habit, streak: currentStreak, bestStreak });
+      setHabits(prev => prev.map(h => {
+        if (h.id !== habitId) return h;
+        return { ...h, history: newHistory, streak: currentStreak, bestStreak };
+      }));
+    } catch (err) {
+      console.error("Failed to toggle habit:", err);
+    }
+  };
+
+  const handleSaveHabit = async (habitData: Partial<Habit>) => {
+    try {
+      if (habitData.id) {
+        const updated = await habitsApi.update(habitData.id, habitData);
+        setHabits(prev => prev.map(h => h.id === habitData.id ? { ...h, ...updated } as Habit : h));
+      } else {
+        const newHabitData = {
+          name: habitData.name || '',
+          description: habitData.description || '',
+          category: habitData.category || 'Health & Fitness',
+          frequency: habitData.frequency || 'daily',
+          streak: 0,
+          bestStreak: 0,
+        };
+        const created = await habitsApi.create(newHabitData);
+        setHabits(prev => [...prev, { ...created, history: {} } as Habit]);
+      }
+    } catch (err) {
+      console.error("Failed to save habit:", err);
+    }
+  };
+
+  const handleDeleteHabit = async (id: string) => {
+    try {
+      await habitsApi.delete(id);
+      setHabits(prev => prev.filter(h => h.id !== id));
+    } catch (err) {
+      console.error("Failed to delete habit:", err);
+    }
   };
 
   const handleLogout = () => {
@@ -333,26 +287,44 @@ export const App: React.FC = () => {
       sessionStorage.removeItem(`evolve_feeling_asked_${currentUser.id}`);
     }
     localStorage.removeItem(USER_STORAGE);
+    clearAuthToken();
     setCurrentUser(null);
     setActiveNav('home');
   };
 
-  // Sync LocalStorage
-  useEffect(() => {
-    localStorage.setItem(MASTERS_STORAGE, JSON.stringify(masters));
-  }, [masters]);
-
-  useEffect(() => {
-    localStorage.setItem(GOALS_STORAGE, JSON.stringify(goals));
-  }, [goals]);
-
+  // Cache logged-in user's session info locally (not sensitive - just 
+  // profile info for convenience, actual data always comes from the API)
   useEffect(() => {
     localStorage.setItem(USER_STORAGE, JSON.stringify(currentUser));
   }, [currentUser]);
 
+  // Fetch this user's goals, habits, and masters from the backend 
+  // whenever they log in (or the app loads with an existing session)
   useEffect(() => {
-    localStorage.setItem(HABITS_STORAGE, JSON.stringify(habits));
-  }, [habits]);
+    if (!currentUser) {
+      setGoals([]);
+      setHabits([]);
+      setMasters([]);
+      return;
+    }
+
+    const loadData = async () => {
+      try {
+        const [fetchedGoals, fetchedHabits, fetchedMasters] = await Promise.all([
+          goalsApi.getAll(),
+          habitsApi.getAll(),
+          mastersApi.getAll(),
+        ]);
+        setGoals(fetchedGoals);
+        setHabits(fetchedHabits);
+        setMasters(fetchedMasters);
+      } catch (err) {
+        console.error("Failed to load user data:", err);
+      }
+    };
+
+    loadData();
+  }, [currentUser]);
 
   const renderAccessDenied = (moduleName: string) => (
     <div className="glass-card p-12 text-center max-w-md mx-auto mt-12 animate-scale-up">
@@ -493,7 +465,13 @@ export const App: React.FC = () => {
               }}
             />
           ) : (
-            renderAccessDenied('Vision Board')
+            renderAccessDenied('Create Vision Board')
+          )
+        ) : activeNav === 'manifestation-poster' ? (
+          currentUser.accessVisionBoard !== false ? (
+            <ManifestationView />
+          ) : (
+            renderAccessDenied('Manifestation')
           )
         ) : null}
       </main>
@@ -502,7 +480,6 @@ export const App: React.FC = () => {
       <AuthModal
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
-        currentUser={currentUser}
         onLogin={(user) => setCurrentUser(user)}
       />
 
@@ -656,122 +633,194 @@ interface LoginFormProps {
 }
 
 const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
+  const [mode, setMode] = useState<'login' | 'signup'>('login');
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [savedVisionBoard, setSavedVisionBoard] = useState<any>(null);
 
-  const handleFormSubmit = (e: React.FormEvent) => {
+  useEffect(() => {
+    const saved = localStorage.getItem('evolve_vision_board_v3');
+    if (saved) {
+      try {
+        setSavedVisionBoard(JSON.parse(saved));
+      } catch (e) {
+        console.error("Failed to parse saved vision board:", e);
+      }
+    }
+  }, []);
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanEmail = email.trim().toLowerCase();
-    
-    const isAdminEmail = cleanEmail === 'admin@liinexus.com' || cleanEmail === 'admin';
-    const isAdminPassword = password === 'admin123' || password === 'admin';
-    
-    const isUserEmail = cleanEmail === 'alex@lifegoals.com' || cleanEmail === 'user';
-    const isUserPassword = password === 'user123' || password === 'user';
-
-    if (isAdminEmail && isAdminPassword) {
-      onLogin(DEFAULT_ADMIN_USER);
-      setError('');
-    } else if (isUserEmail && isUserPassword) {
-      onLogin(DEFAULT_REGULAR_USER);
-      setError('');
-    } else {
-      setError('Invalid credentials. Please enter correct Email and Password.');
+    setError('');
+    setLoading(true);
+    try {
+      const result = await authApi.login(email, password);
+      setAuthToken(result.token);
+      onLogin(result.user);
+    } catch (err: any) {
+      setError(err.message || 'Login failed. Check your credentials.');
+    } finally {
+      setLoading(false);
     }
   };
 
-  return (
-    <div className="login-fullscreen-container">
-      <div className="login-glass-card">
-        <div className="login-logo-circle">
-          <ShieldCheck size={28} />
+  const handleSignup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      await authApi.signup(name, email, password);
+      const result = await authApi.login(email, password);
+      setAuthToken(result.token);
+      onLogin(result.user);
+    } catch (err: any) {
+      setError(err.message || 'Signup failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const renderLoginFormCard = () => (
+    <div className="login-glass-card">
+      <div className="login-logo-circle">
+        <ShieldCheck size={28} />
+      </div>
+
+      <h2 className="login-title-rainbow">
+        {mode === 'login' ? 'Evolve Login Portal' : 'Create Your Evolve Account'}
+      </h2>
+      <p className="login-subtitle">
+        {mode === 'login'
+          ? 'Please enter your credentials to access your dashboard'
+          : 'Sign up to start tracking your goals and habits'}
+      </p>
+
+      {error && (
+        <div className="login-error-alert">
+          <span>⚠️ {error}</span>
         </div>
-        
-        <h2 className="login-title-rainbow">Evolve Login Portal</h2>
-        <p className="login-subtitle">Please enter your credentials to access your dashboard</p>
+      )}
 
-        <div className="login-cred-box">
-          <div className="login-cred-title">
-            <Key size={14} /> Demo Credentials
-          </div>
-          <div className="login-cred-line">
-            Admin: <code>admin@liinexus.com</code> / <code>admin123</code>
-          </div>
-          <div className="login-cred-line">
-            User: <code>alex@lifegoals.com</code> / <code>user123</code>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
-          <button 
-            type="button" 
-            className="login-instant-btn"
-            style={{ margin: 0, fontSize: '0.8rem', padding: '10px 8px' }}
-            onClick={() => {
-              setEmail('admin@liinexus.com');
-              setPassword('admin123');
-            }}
-          >
-            <Zap size={14} /> Auto-fill Admin
-          </button>
-          <button 
-            type="button" 
-            className="login-instant-btn"
-            style={{ margin: 0, fontSize: '0.8rem', padding: '10px 8px', background: 'linear-gradient(135deg, #7c3aed, #8b5cf6)', boxShadow: '0 4px 12px rgba(124, 58, 237, 0.25)' }}
-            onClick={() => {
-              setEmail('alex@lifegoals.com');
-              setPassword('user123');
-            }}
-          >
-            <Zap size={14} /> Auto-fill User
-          </button>
-        </div>
-
-        <div className="login-divider-or">Or Sign In Manually</div>
-
-        {error && (
-          <div className="login-error-alert">
-            <span>⚠️ {error}</span>
-          </div>
-        )}
-
-        <form onSubmit={handleFormSubmit}>
+      <form onSubmit={mode === 'login' ? handleLogin : handleSignup}>
+        {mode === 'signup' && (
           <div className="login-form-group">
-            <label className="login-form-label">Email Address</label>
+            <label className="login-form-label">Full Name</label>
             <div className="login-input-wrapper">
               <Mail size={16} className="login-input-icon" />
               <input
-                type="email"
+                type="text"
                 required
-                placeholder="admin@liinexus.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Your name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
                 className="login-input-field"
               />
             </div>
           </div>
+        )}
 
-          <div className="login-form-group">
-            <label className="login-form-label">Password</label>
-            <div className="login-input-wrapper">
-              <Lock size={16} className="login-input-icon" />
-              <input
-                type="password"
-                required
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="login-input-field"
-              />
-            </div>
+        <div className="login-form-group">
+          <label className="login-form-label">Email Address</label>
+          <div className="login-input-wrapper">
+            <Mail size={16} className="login-input-icon" />
+            <input
+              type="email"
+              required
+              placeholder="you@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="login-input-field"
+            />
           </div>
+        </div>
 
-          <button type="submit" className="login-submit-btn">
-            Sign In
-          </button>
-        </form>
+        <div className="login-form-group">
+          <label className="login-form-label">Password</label>
+          <div className="login-input-wrapper">
+            <Lock size={16} className="login-input-icon" />
+            <input
+              type="password"
+              required
+              minLength={6}
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="login-input-field"
+            />
+          </div>
+        </div>
+
+        <button type="submit" className="login-submit-btn" disabled={loading}>
+          {loading ? 'Please wait...' : mode === 'login' ? 'Sign In' : 'Create Account'}
+        </button>
+      </form>
+
+      <div className="login-divider-or" style={{ marginTop: '16px', cursor: 'pointer' }}>
+        <span
+          onClick={() => {
+            setMode(mode === 'login' ? 'signup' : 'login');
+            setError('');
+          }}
+        >
+          {mode === 'login'
+            ? "Don't have an account? Sign up"
+            : 'Already have an account? Sign in'}
+        </span>
       </div>
+    </div>
+  );
+
+  const CATEGORIES_KEYS = [
+    { key: 'spirituality', label: 'Spirituality' },
+    { key: 'finances', label: 'Money & Finances' },
+    { key: 'career', label: 'Career & Work' },
+    { key: 'health', label: 'Health & Fitness' },
+    { key: 'recreation', label: 'Fun & Recreation' },
+    { key: 'environment', label: 'Environment' },
+    { key: 'community', label: 'Community' },
+    { key: 'family', label: 'Family & Friends' },
+    { key: 'love', label: 'Partner & Love' },
+    { key: 'growth', label: 'Personal Growth & Learning' }
+  ];
+
+  const currentYear = new Date().getFullYear();
+
+  return (
+    <div className="login-fullscreen-container">
+      {savedVisionBoard ? (
+        <div className="login-split-container animate-scale-up">
+          {/* Left Pinned Board side */}
+          <div className="login-pinned-board-side">
+            <h2 className="login-pinned-board-title">✨ MY {currentYear} VISION BOARD ✨</h2>
+            <div className="login-pinned-grid" style={{ marginTop: '16px' }}>
+              {CATEGORIES_KEYS.map((cat) => {
+                const data = savedVisionBoard[cat.key];
+                if (!data) return null;
+                return (
+                  <div key={cat.key} className="login-pinned-polaroid">
+                    <img 
+                      src={data.imageUrl} 
+                      alt={cat.label} 
+                      className="login-pinned-polaroid-img" 
+                    />
+                    <div className="login-pinned-polaroid-category">{cat.label}</div>
+                    <div className="login-pinned-polaroid-text">"{data.aspiration}"</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          {/* Right Glass Card Login form */}
+          <div className="login-glass-card-side">
+            {renderLoginFormCard()}
+          </div>
+        </div>
+      ) : (
+        renderLoginFormCard()
+      )}
     </div>
   );
 };

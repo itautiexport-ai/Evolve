@@ -26,7 +26,7 @@ export const GoalModal: React.FC<GoalModalProps> = ({
 }) => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [category, setCategory] = useState<Category>('Personal Growth');
+  const [category, setCategory] = useState<Category>('Personal Growth & Learning');
   const [priority, setPriority] = useState<Priority>('medium');
   const [targetDate, setTargetDate] = useState('');
   const [progress, setProgress] = useState(0);
@@ -56,7 +56,7 @@ export const GoalModal: React.FC<GoalModalProps> = ({
       // Defaults for new goal
       setTitle('');
       setDescription('');
-      setCategory('Personal Growth');
+      setCategory('Personal Growth & Learning');
       setPriority('medium');
       const defaultDate = new Date();
       defaultDate.setMonth(defaultDate.getMonth() + 3);
@@ -158,13 +158,16 @@ export const GoalModal: React.FC<GoalModalProps> = ({
                 onChange={(e) => setCategory(e.target.value as Category)}
                 className="form-select"
               >
+                <option value="Spirituality">Spirituality</option>
+                <option value="Money & Finances">Money & Finances</option>
                 <option value="Career & Work">Career & Work</option>
                 <option value="Health & Fitness">Health & Fitness</option>
-                <option value="Financial Freedom">Financial Freedom</option>
-                <option value="Personal Growth">Personal Growth</option>
-                <option value="Travel & Adventure">Travel & Adventure</option>
-                <option value="Relationships & Family">Relationships & Family</option>
-                <option value="Mindfulness & Wellbeing">Mindfulness & Wellbeing</option>
+                <option value="Fun & Recreation">Fun & Recreation</option>
+                <option value="Environment">Environment</option>
+                <option value="Community">Community</option>
+                <option value="Family & Friends">Family & Friends</option>
+                <option value="Partner & Love">Partner & Love</option>
+                <option value="Personal Growth & Learning">Personal Growth & Learning</option>
               </select>
             </div>
 

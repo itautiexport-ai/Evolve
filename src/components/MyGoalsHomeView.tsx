@@ -24,7 +24,7 @@ export const MyGoalsHomeView: React.FC<MyGoalsHomeViewProps> = ({ goals, setActi
     },
     {
       id: 'goals-vision',
-      title: 'Vision Board',
+      title: 'Create Vision Board',
       description: 'Visualize your dreams and aspirations on an interactive canvas. Upload images, set target dates, reflect on your accomplishments, and stay aligned with your path.',
       icon: <Sparkles size={32} className="text-blue-600" />,
       colorClass: 'blue-pastel-theme'

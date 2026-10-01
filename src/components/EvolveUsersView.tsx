@@ -163,8 +163,6 @@ export const EvolveUsersView: React.FC<EvolveUsersViewProps> = ({
   };
 
   const handleDeleteUser = (idToDelete: string) => {
-    if (!isAdmin) return;
-
     if (idToDelete === currentUser.id) {
       alert('You cannot delete the currently logged in user.');
       return;
@@ -379,27 +377,24 @@ export const EvolveUsersView: React.FC<EvolveUsersViewProps> = ({
                                 Switch
                               </button>
                             )}
-                            
-                            {/* Actions restricted to Administrators only */}
+                            {/* Actions: Edit restricted to Admins, Delete open to all */}
                             {isAdmin && (
-                              <>
-                                <button
-                                  onClick={() => startEdit(user)}
-                                  className="btn btn-xs btn-outline-pastel ml-2"
-                                  title="Edit user details"
-                                >
-                                  <Edit2 size={12} />
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteUser(user.id)}
-                                  disabled={isActiveSession}
-                                  className="btn btn-xs delete-btn"
-                                  title="Delete user"
-                                >
-                                  <Trash2 size={13} />
-                                </button>
-                              </>
+                              <button
+                                onClick={() => startEdit(user)}
+                                className="btn btn-xs btn-outline-pastel ml-2"
+                                title="Edit user details"
+                              >
+                                <Edit2 size={12} />
+                              </button>
                             )}
+                            <button
+                              onClick={() => handleDeleteUser(user.id)}
+                              disabled={isActiveSession}
+                              className="btn btn-xs delete-btn ml-2"
+                              title="Delete user"
+                            >
+                              <Trash2 size={13} />
+                            </button>
                           </div>
                         </td>
                       </tr>

@@ -14,13 +14,16 @@ interface MyGoalsViewProps {
 }
 
 const CATEGORIES: Category[] = [
+  'Spirituality',
+  'Money & Finances',
   'Career & Work',
   'Health & Fitness',
-  'Financial Freedom',
-  'Personal Growth',
-  'Travel & Adventure',
-  'Relationships & Family',
-  'Mindfulness & Wellbeing'
+  'Fun & Recreation',
+  'Environment',
+  'Community',
+  'Family & Friends',
+  'Partner & Love',
+  'Personal Growth & Learning'
 ];
 
 const STATUSES: { value: Status; label: string; emoji: string }[] = [
@@ -341,13 +344,16 @@ export const MyGoalsView: React.FC<MyGoalsViewProps> = ({
                   const catProgress = catTotal > 0 ? Math.round(catGoals.reduce((acc, g) => acc + g.progress, 0) / catTotal) : 0;
                   
                   const colors = {
-                    'Financial Freedom': '#eab308',
+                    'Spirituality': '#a78bfa',
+                    'Money & Finances': '#eab308',
                     'Career & Work': '#3b82f6',
                     'Health & Fitness': '#ef4444',
-                    'Personal Growth': '#a855f7',
-                    'Travel & Adventure': '#f97316',
-                    'Relationships & Family': '#ec4899',
-                    'Mindfulness & Wellbeing': '#06b6d4'
+                    'Fun & Recreation': '#f97316',
+                    'Environment': '#10b981',
+                    'Community': '#06b6d4',
+                    'Family & Friends': '#ec4899',
+                    'Partner & Love': '#f43f5e',
+                    'Personal Growth & Learning': '#8b5cf6'
                   }[cat] || '#3b82f6';
 
                   return (

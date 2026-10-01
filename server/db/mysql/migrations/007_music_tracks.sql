@@ -1,0 +1,9 @@
+-- Music track URLs, tied to a user
+CREATE TABLE IF NOT EXISTS music_tracks (
+  id CHAR(36) PRIMARY KEY,
+  user_id CHAR(36) NOT NULL,
+  title VARCHAR(255) NULL,
+  url VARCHAR(1000) NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_music_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

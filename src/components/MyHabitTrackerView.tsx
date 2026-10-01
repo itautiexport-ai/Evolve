@@ -13,12 +13,16 @@ interface MyHabitTrackerViewProps {
 }
 
 const CATEGORIES: HabitCategory[] = [
+  'Spirituality',
+  'Money & Finances',
+  'Career & Work',
   'Health & Fitness',
-  'Productivity',
-  'Personal Growth',
-  'Mindfulness & Wellbeing',
-  'Relationships',
-  'Financial'
+  'Fun & Recreation',
+  'Environment',
+  'Community',
+  'Family & Friends',
+  'Partner & Love',
+  'Personal Growth & Learning'
 ];
 
 export const MyHabitTrackerView: React.FC<MyHabitTrackerViewProps> = ({
@@ -229,12 +233,16 @@ export const MyHabitTrackerView: React.FC<MyHabitTrackerViewProps> = ({
 
   const getCategoryClass = (category: HabitCategory) => {
     switch (category) {
-      case 'Health & Fitness': return 'cat-health';
-      case 'Productivity': return 'cat-productivity';
-      case 'Personal Growth': return 'cat-growth';
-      case 'Mindfulness & Wellbeing': return 'cat-mindfulness';
-      case 'Relationships': return 'cat-relationships';
-      case 'Financial': return 'cat-financial';
+      case 'Spirituality': return 'cat-purple';
+      case 'Money & Finances': return 'cat-emerald';
+      case 'Career & Work': return 'cat-blue';
+      case 'Health & Fitness': return 'cat-red';
+      case 'Fun & Recreation': return 'cat-amber';
+      case 'Environment': return 'cat-cyan';
+      case 'Community': return 'cat-emerald';
+      case 'Family & Friends': return 'cat-pink';
+      case 'Partner & Love': return 'cat-pink';
+      case 'Personal Growth & Learning': return 'cat-purple';
       default: return '';
     }
   };

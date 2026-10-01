@@ -1,5 +1,5 @@
 /* Evolve UI Design System - Exact Replica of UI Screenshot */
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=Caveat:wght@400;700&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Quicksand:wght@300..700&display=swap');
 
 :root {
   --font-main: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -4876,5 +4876,1518 @@ svg circle {
   transform: translateY(-2px) !important;
   border-color: rgba(99, 102, 241, 0.3) !important;
   box-shadow: 0 12px 20px -8px rgba(0, 0, 0, 0.08), 0 4px 12px -2px rgba(99, 102, 241, 0.04), inset 0 0 0 1px rgba(255, 255, 255, 0.8) !important;
+}
+
+/* Pinteresty Vision Board Custom Styles */
+.pinterest-scrapbook-paper {
+  background-color: #f7f4eb;
+  background-image: radial-gradient(#d6d3d1 1.2px, transparent 1.2px);
+  background-size: 24px 24px;
+  border-radius: 24px;
+  padding: 30px;
+  box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.03), 0 10px 30px rgba(0, 0, 0, 0.05);
+  border: 1px dashed rgba(0, 0, 0, 0.1);
+  position: relative;
+  overflow: hidden;
+}
+
+.pinterest-vision-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 16px 12px;
+  font-family: 'Quicksand', 'Inter', sans-serif;
+  min-height: calc(100vh - 120px);
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+.pinterest-vision-header {
+  text-align: center;
+  margin-bottom: 24px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.pinterest-vision-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 2.8rem;
+  color: #1c1917;
+  font-weight: 900;
+  margin-bottom: 4px;
+  letter-spacing: 0.5px;
+  text-shadow: 1px 1px 0px rgba(255,255,255,0.8);
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.pinterest-vision-subtitle {
+  font-size: 1.1rem;
+  color: #78716c;
+  font-style: italic;
+  font-family: 'Quicksand', sans-serif;
+}
+
+.pinterest-board-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  gap: 16px;
+  padding: 5px;
+}
+
+@media (max-width: 1100px) {
+  .pinterest-board-grid {
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: auto;
+  }
+  .pinterest-vision-container {
+    min-height: auto;
+  }
+}
+
+@media (max-width: 768px) {
+  .pinterest-board-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Polaroid Card Style */
+.pinterest-polaroid-card {
+  background: #ffffff;
+  padding: 10px 10px 16px 10px;
+  border-radius: 4px;
+  box-shadow: 0 6px 12px rgba(0,0,0,0.05), 0 2px 4px rgba(0,0,0,0.03);
+  position: relative;
+  transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.3s ease;
+  border: 1px solid #f2eedd;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.pinterest-polaroid-card:hover {
+  transform: scale(1.04) translateY(-5px) !important;
+  box-shadow: 0 16px 30px rgba(0,0,0,0.12), 0 6px 12px rgba(0,0,0,0.08);
+  z-index: 10;
+}
+
+/* Scrapbook pushpins */
+.pinterest-pushpin {
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  box-shadow: 0 3px 5px rgba(0,0,0,0.2), inset -2px -2px 4px rgba(0,0,0,0.3);
+  z-index: 5;
+}
+
+.pinterest-pushpin::after {
+  content: '';
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%) rotate(10deg);
+  width: 2px;
+  height: 8px;
+  background: #78716c;
+}
+
+/* Pushpin Colors */
+.pinterest-pushpin.gold {
+  background: radial-gradient(circle at 5px 5px, #fbbf24, #d97706);
+}
+.pinterest-pushpin.rose {
+  background: radial-gradient(circle at 5px 5px, #fda4af, #e11d48);
+}
+.pinterest-pushpin.sage {
+  background: radial-gradient(circle at 5px 5px, #a7f3d0, #059669);
+}
+
+/* Washi tape styling with realistic clip-path torn edges */
+.pinterest-washitape {
+  position: absolute;
+  top: -12px;
+  width: 95px;
+  height: 24px;
+  z-index: 2;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  opacity: 0.8;
+  clip-path: polygon(
+    0% 8%, 5% 0%, 10% 10%, 15% 2%, 20% 12%, 25% 3%, 30% 9%, 35% 1%, 40% 11%, 45% 2%, 50% 8%, 55% 0%, 60% 11%, 65% 3%, 70% 9%, 75% 1%, 80% 12%, 85% 4%, 90% 10%, 95% 1%, 100% 8%,
+    100% 92%, 95% 100%, 90% 90%, 85% 98%, 80% 88%, 75% 99%, 70% 90%, 65% 97%, 60% 89%, 55% 100%, 50% 92%, 45% 99%, 40% 88%, 35% 98%, 30% 90%, 25% 97%, 20% 89%, 15% 100%, 10% 90%, 5% 98%, 0% 92%
+  );
+}
+
+.pinterest-washitape.rose-tape {
+  background-color: rgba(251, 113, 133, 0.45);
+  border-left: 1px dashed rgba(255,255,255,0.4);
+  border-right: 1px dashed rgba(255,255,255,0.4);
+}
+.pinterest-washitape.sky-tape {
+  background-color: rgba(125, 211, 252, 0.45);
+  border-left: 1px dashed rgba(255,255,255,0.4);
+  border-right: 1px dashed rgba(255,255,255,0.4);
+}
+.pinterest-washitape.sage-tape {
+  background-color: rgba(167, 243, 208, 0.45);
+  border-left: 1px dashed rgba(255,255,255,0.4);
+  border-right: 1px dashed rgba(255,255,255,0.4);
+}
+
+/* Image Container */
+.pinterest-polaroid-img-container {
+  width: 100%;
+  height: 10.5vh;
+  min-height: 80px;
+  max-height: 110px;
+  background: #fafaf9;
+  border: 1px solid #e7e5e4;
+  border-radius: 1px;
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.pinterest-polaroid-img-container:hover {
+  opacity: 0.9;
+}
+
+.pinterest-polaroid-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.pinterest-upload-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: #a8a29e;
+  font-size: 0.8rem;
+  padding: 12px;
+  text-align: center;
+  width: 100%;
+  height: 100%;
+  justify-content: center;
+}
+
+.pinterest-upload-placeholder span {
+  font-weight: 700;
+  color: #e60023;
+}
+
+/* AI Generating Spinner */
+.ai-spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid rgba(5, 150, 105, 0.15);
+  border-top-color: #059669;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Pulsing loader animation */
+.animate-pulse {
+  animation: pulse-glow 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+/* Regenerate AI Image Button */
+.pinterest-img-regenerate-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #059669;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  transition: all 0.2s ease;
+  z-index: 10;
+  padding: 0;
+}
+
+.pinterest-img-regenerate-btn:hover {
+  transform: scale(1.1);
+  background: #ffffff;
+  color: #047857;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+/* Text Input Area styling as realistic handwritten ink */
+.pinterest-polaroid-card-body {
+  width: 100%;
+  margin-top: 12px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.pinterest-polaroid-category-label {
+  font-family: 'Playfair Display', serif;
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #292524;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.pinterest-polaroid-input {
+  width: 100%;
+  border: none;
+  border-bottom: 1px dashed transparent;
+  font-family: 'Caveat', cursive;
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #1e3a8a; /* Handwritten Blue Ink */
+  text-align: center;
+  padding: 2px 0;
+  background: transparent;
+  outline: none;
+  transition: border-bottom-color 0.2s, color 0.2s;
+}
+
+.pinterest-polaroid-input:hover {
+  border-bottom-color: rgba(30, 58, 138, 0.25);
+}
+
+.pinterest-polaroid-input:focus {
+  border-bottom-color: #e60023;
+  color: #e60023; /* Turns red-ish when active editing */
+}
+
+/* Ruled Vintage Quote Card centerpiece */
+.pinterest-quote-card {
+  background: #fdfbf7;
+  border: 1px solid #e7ddc4;
+  box-shadow: 0 6px 15px rgba(0,0,0,0.05), inset 0 0 20px rgba(0,0,0,0.01);
+  border-radius: 8px;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  position: relative;
+  /* Ruled notebook line styling */
+  background-image: linear-gradient(rgba(229, 231, 235, 0.7) 1px, transparent 1px);
+  background-size: 100% 24px;
+  line-height: 24px;
+  min-height: 135px;
+}
+
+.pinterest-quote-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 20px;
+  width: 1px;
+  background: rgba(239, 68, 68, 0.3); /* Notebook margin line */
+}
+
+.pinterest-quote-card-header {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: #c2410c;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  line-height: 1.2;
+}
+
+.pinterest-quote-card-text {
+  font-family: 'Caveat', cursive;
+  font-size: 1.55rem;
+  font-weight: 700;
+  color: #374151;
+  line-height: 1.4;
+}
+
+.pinterest-quote-card-tag {
+  font-size: 0.75rem;
+  color: #9ca3af;
+  font-weight: 600;
+  margin-top: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  line-height: 1.2;
+}
+
+/* Sticker Collage Card centerpiece */
+.pinterest-collage-card {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  min-height: 135px;
+}
+
+/* Scrapbook Charms & Stickers styles */
+.scrapbook-sticker {
+  position: absolute;
+  transition: transform 0.3s;
+  user-select: none;
+}
+
+.scrapbook-sticker:hover {
+  transform: scale(1.1) rotate(0deg) !important;
+}
+
+.scrapbook-sticker.manifest-tag {
+  transform: rotate(-10deg);
+  background: #f43f5e;
+  color: white;
+  font-family: 'Quicksand', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 6px 14px;
+  border-radius: 4px;
+  box-shadow: 2px 4px 10px rgba(0,0,0,0.1);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  top: 15px;
+  left: 20px;
+  border: 1px dashed rgba(255,255,255,0.5);
+}
+
+.scrapbook-sticker.retro-stamp {
+  transform: rotate(15deg);
+  width: 55px;
+  height: 70px;
+  background: #fef3c7;
+  border: 4px double #d97706;
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 3px 5px 12px rgba(0,0,0,0.08);
+  bottom: 15px;
+  right: 15px;
+}
+
+.scrapbook-sticker.retro-stamp span:first-child {
+  font-size: 1.2rem;
+}
+.scrapbook-sticker.retro-stamp span:last-child {
+  font-size: 0.6rem;
+  font-weight: 800;
+  color: #d97706;
+  letter-spacing: 0.5px;
+}
+
+.scrapbook-sticker.dried-flower {
+  font-size: 3rem;
+  top: 40px;
+  right: 30px;
+  opacity: 0.85;
+  transform: rotate(-25deg);
+  filter: drop-shadow(2px 4px 6px rgba(0,0,0,0.1));
+}
+
+.scrapbook-sticker.cute-coffee {
+  font-size: 2.2rem;
+  bottom: 25px;
+  left: 35px;
+  transform: rotate(8deg);
+  filter: drop-shadow(2px 3px 4px rgba(0,0,0,0.1));
+}
+
+.scrapbook-sticker.mini-clip {
+  width: 40px;
+  height: 12px;
+  background: rgba(209, 213, 219, 0.85);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  transform: rotate(-45deg);
+  top: 5px;
+  right: 70px;
+}
+
+/* Floating sparkles animation */
+.sparkle-charm {
+  animation: sparkle-float 4s ease-in-out infinite alternate;
+  color: #fbbf24;
+  text-shadow: 0 0 10px rgba(251, 191, 36, 0.4);
+}
+
+.sparkle-charm.s2 {
+  animation-delay: -1.5s;
+  animation-duration: 5s;
+}
+
+.sparkle-charm.s3 {
+  animation-delay: -3s;
+  animation-duration: 3.5s;
+}
+
+@keyframes sparkle-float {
+  0% { transform: translateY(0) scale(1) rotate(0deg); opacity: 0.8; }
+  100% { transform: translateY(-10px) scale(1.15) rotate(15deg); opacity: 1; }
+}
+
+/* Action Control Buttons bar */
+.pinterest-manifest-btn-container {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 24px;
+  margin-bottom: 12px;
+}
+
+.pinterest-manifest-btn {
+  background-color: #e60023;
+  color: #ffffff;
+  font-family: 'Quicksand', sans-serif;
+  font-weight: 700;
+  font-size: 1rem;
+  padding: 12px 28px;
+  border-radius: 9999px;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(230, 0, 35, 0.2);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background-color 0.2s, transform 0.2s, box-shadow 0.2s;
+}
+
+.pinterest-manifest-btn:hover {
+  background-color: #ad081b;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(230, 0, 35, 0.3);
+}
+
+.pinterest-manifest-btn.secondary-print {
+  background-color: #3f3f46;
+  box-shadow: 0 4px 12px rgba(63, 63, 70, 0.2);
+}
+
+.pinterest-manifest-btn.secondary-print:hover {
+  background-color: #27272a;
+  box-shadow: 0 6px 16px rgba(63, 63, 70, 0.3);
+}
+
+/* Slang Modal / Prompt Overlay */
+.pinterest-slang-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 99999;
+  animation: fadeIn 0.25s ease;
+}
+
+.pinterest-slang-modal {
+  background: #fdfaf6;
+  border: 1px solid #f3ebd9;
+  border-radius: 24px;
+  padding: 32px;
+  max-width: 400px;
+  width: 90%;
+  text-align: center;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.12);
+  position: relative;
+  overflow: hidden;
+  animation: scaleUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.pinterest-slang-modal-sparkle {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  color: #f59e0b;
+  animation: spin 3s linear infinite;
+}
+
+.pinterest-slang-modal h2 {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.8rem;
+  font-weight: 800;
+  color: #1c1917;
+  margin-bottom: 12px;
+}
+
+.pinterest-slang-modal p {
+  font-size: 0.95rem;
+  color: #6b7280;
+  line-height: 1.5;
+  margin-bottom: 24px;
+}
+
+.pinterest-slang-btn-group {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.pinterest-btn-manifest {
+  background: #e60023;
+  color: #ffffff;
+  padding: 10px 24px;
+  border-radius: 9999px;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.pinterest-btn-manifest:hover {
+  background: #ad081b;
+}
+
+.pinterest-btn-wait {
+  background: transparent;
+  color: #78716c;
+  padding: 10px 24px;
+  border-radius: 9999px;
+  font-weight: 600;
+  border: 1px solid #d6d3d1;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.pinterest-btn-wait:hover {
+  background: #f5f5f4;
+}
+
+/* @media print styles to print the vision board perfectly as a single page poster */
+@media print {
+  /* Hide the rest of the application interface entirely */
+  body, html {
+    background: #f7f4eb !important;
+    background-image: radial-gradient(#d6d3d1 1.2px, transparent 1.2px) !important;
+    background-size: 24px 24px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    height: 100% !important;
+    width: 100% !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .screenshot-sidebar,
+  .screenshot-header,
+  .pinterest-manifest-btn-container,
+  .pinterest-slang-overlay,
+  .bell-icon-card,
+  .user-profile-stack,
+  .logout-btn {
+    display: none !important;
+  }
+
+  .screenshot-layout-container {
+    display: block !important;
+    min-width: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    overflow: visible !important;
+  }
+
+  .screenshot-main-content {
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    display: block !important;
+    overflow: visible !important;
+  }
+
+  .pinterest-vision-container {
+    max-width: 100% !important;
+    width: 100% !important;
+    height: 100vh !important;
+    padding: 20px !important;
+    box-sizing: border-box !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
+    page-break-after: avoid;
+    page-break-before: avoid;
+    page-break-inside: avoid;
+  }
+
+  .pinterest-scrapbook-paper {
+    border: none !important;
+    padding: 10px !important;
+    box-shadow: none !important;
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
+  }
+
+  .pinterest-vision-header {
+    margin-bottom: 15px !important;
+  }
+
+  .pinterest-vision-title {
+    font-size: 2.2rem !important;
+  }
+
+  /* Force grid columns to print in a single-screen layout (4 columns x 3 rows) */
+  .pinterest-board-grid {
+    display: grid !important;
+    grid-template-columns: repeat(4, 1fr) !important;
+    grid-template-rows: repeat(3, 1fr) !important;
+    gap: 16px !important;
+    flex: 1 !important;
+    padding: 0 !important;
+  }
+
+  .pinterest-polaroid-card {
+    box-shadow: 0 4px 10px rgba(0,0,0,0.05) !important;
+    border: 1px solid #e7ddc4 !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    padding: 8px 8px 14px 8px !important;
+  }
+
+  .pinterest-polaroid-img-container {
+    aspect-ratio: 1.2 !important;
+  }
+
+  .pinterest-polaroid-input {
+    border-bottom: none !important;
+  }
+
+  .pinterest-quote-card {
+    min-height: 0 !important;
+    padding: 12px !important;
+  }
+
+  .pinterest-collage-card {
+    min-height: 0 !important;
+  }
+
+  /* Hide print instructions */
+  .pinterest-upload-placeholder span {
+    display: none !important;
+  }
+}
+
+/* Pinterest Collage Preview Modal Styles */
+.pinterest-preview-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(24, 24, 27, 0.82);
+  backdrop-filter: blur(12px);
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 30px;
+  overflow-y: auto;
+  animation: fadeIn 0.25s ease;
+}
+
+.pinterest-preview-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  max-width: 1200px;
+  margin-bottom: 20px;
+  background: rgba(255, 255, 255, 0.12);
+  padding: 12px 24px;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(10px);
+}
+
+.pinterest-preview-toolbar-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: 0.5px;
+}
+
+.pinterest-preview-toolbar-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.pinterest-preview-btn {
+  padding: 10px 22px;
+  border-radius: 9999px;
+  font-family: 'Quicksand', sans-serif;
+  font-weight: 700;
+  font-size: 0.9rem;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: transform 0.2s, background-color 0.2s;
+}
+
+.pinterest-preview-btn.primary {
+  background-color: #e60023;
+  color: white;
+  box-shadow: 0 4px 12px rgba(230, 0, 35, 0.3);
+}
+
+.pinterest-preview-btn.primary:hover {
+  background-color: #ad081b;
+  transform: translateY(-1px);
+}
+
+.pinterest-preview-btn.secondary {
+  background-color: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.pinterest-preview-btn.secondary:hover {
+  background-color: rgba(255, 255, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+.pinterest-preview-content {
+  width: min(92vw, 115vh);
+  aspect-ratio: 1.414 / 1;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  border-radius: 12px;
+  background: white;
+  overflow: hidden;
+}
+
+/* Print CSS adjustments for the Preview board when opened */
+@media print {
+  /* Hide standard page elements */
+  body, html, .screenshot-layout-container, .screenshot-main-content {
+    background: #f7f4eb !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    overflow: visible !important;
+  }
+  
+  .pinterest-preview-overlay {
+    position: absolute !important;
+    inset: 0 !important;
+    background: #f7f4eb !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    display: block !important;
+    backdrop-filter: none !important;
+  }
+  
+  .pinterest-preview-toolbar {
+    display: none !important;
+  }
+  
+  .pinterest-preview-content {
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    height: 100% !important;
+  }
+}
+
+/* Pinterest Standalone Manifestation Module Styles */
+.manifestation-module-container {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 16px 12px;
+  min-height: calc(100vh - 120px);
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+.manifestation-paper {
+  background-color: #f7f4eb;
+  background-image: radial-gradient(#d6d3d1 1.2px, transparent 1.2px);
+  background-size: 24px 24px;
+  border-radius: 24px;
+  padding: 40px 30px;
+  box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.03), 0 10px 30px rgba(0, 0, 0, 0.05);
+  border: 1px dashed rgba(0, 0, 0, 0.1);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.manifestation-header {
+  text-align: center;
+  margin-bottom: 30px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.magic-wand-icon {
+  cursor: pointer;
+  color: #db2777;
+  transition: transform 0.2s, filter 0.2s;
+  margin-bottom: 8px;
+}
+
+.magic-wand-icon:hover {
+  transform: scale(1.2) rotate(15deg);
+  filter: drop-shadow(0 0 10px rgba(219, 39, 119, 0.5));
+}
+
+.magic-wand-icon.wave-active {
+  animation: wand-wave-action 0.8s ease-in-out;
+}
+
+@keyframes wand-wave-action {
+  0% { transform: scale(1.2) rotate(15deg); }
+  25% { transform: scale(1.3) rotate(-25deg) translateY(-5px); }
+  50% { transform: scale(1.3) rotate(30deg) translateY(-5px); }
+  75% { transform: scale(1.2) rotate(-15deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+.manifestation-setup-layout {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex: 1;
+  width: 100%;
+}
+
+.manifestation-form-card {
+  background: #ffffff;
+  border: 1px solid #f2eedd;
+  border-radius: 16px;
+  padding: 28px 32px;
+  max-width: 520px;
+  width: 100%;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  box-sizing: border-box;
+}
+
+.setup-card-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #1c1917;
+  text-align: center;
+  margin-bottom: 5px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.form-label {
+  font-family: 'Quicksand', sans-serif;
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: #78716c;
+}
+
+.manifestation-setup-input {
+  width: 100%;
+  border: none;
+  border-bottom: 2px dashed #d6d3d1;
+  font-family: 'Caveat', cursive;
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: #1e3a8a;
+  padding: 6px 4px;
+  background: transparent;
+  outline: none;
+  transition: border-bottom-color 0.2s;
+  box-sizing: border-box;
+}
+
+.manifestation-setup-input:focus {
+  border-bottom-color: #db2777;
+}
+
+.manifest-upload-zone {
+  width: 100%;
+  border: 2px dashed #e2e8f0;
+  border-radius: 12px;
+  background: #fafaf9;
+  cursor: pointer;
+  transition: border-color 0.2s, background-color 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1.65;
+  overflow: hidden;
+  position: relative;
+}
+
+.manifest-upload-zone:hover {
+  border-color: #db2777;
+  background-color: #f5f5f4;
+}
+
+.manifest-upload-prompt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: #78716c;
+  font-family: 'Quicksand', sans-serif;
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.upload-icon {
+  color: #a8a29e;
+}
+
+.manifest-upload-preview-container {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+.manifest-upload-preview {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.manifest-upload-overlay-text {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-family: 'Quicksand', sans-serif;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.manifest-upload-zone:hover .manifest-upload-overlay-text {
+  opacity: 1;
+}
+
+.start-manifest-btn {
+  width: 100%;
+  justify-content: center;
+  margin-top: 10px;
+}
+
+/* Active Manifestation Layout */
+.manifestation-active-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+}
+
+.manifest-poster-polaroid-card {
+  background: #ffffff;
+  padding: 16px 16px 28px 16px;
+  border-radius: 4px;
+  box-shadow: 0 15px 35px rgba(0,0,0,0.06), 0 5px 15px rgba(0,0,0,0.03);
+  position: relative;
+  border: 1px solid #f2eedd;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  box-sizing: border-box;
+  transform: rotate(1deg);
+}
+
+.active-poster-img-container {
+  width: 100%;
+  aspect-ratio: 1.42;
+  overflow: hidden;
+  border: 1px solid #e7e5e4;
+  border-radius: 2px;
+}
+
+.active-poster-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.active-poster-details {
+  width: 100%;
+  margin-top: 18px;
+  text-align: center;
+}
+
+.active-poster-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.8rem;
+  font-weight: 900;
+  color: #1c1917;
+  line-height: 1.35;
+  margin-bottom: 6px;
+}
+
+.active-days-counter {
+  font-family: 'Caveat', cursive;
+  font-size: 1.55rem;
+  font-weight: 700;
+  color: #059669; /* Cosmic emerald */
+}
+
+/* Daily Cosmic Whisper */
+.daily-cosmic-message-card {
+  background: #fffdf5;
+  border: 1px solid #e9dfc6;
+  box-shadow: 0 6px 15px rgba(0,0,0,0.04);
+  border-radius: 8px;
+  padding: 16px 24px;
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  position: relative;
+}
+
+.cosmic-card-label {
+  font-family: 'Playfair Display', serif;
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: #c2410c;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 6px;
+}
+
+.cosmic-quote-text {
+  font-family: 'Caveat', cursive;
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: #27272a;
+  margin: 6px 0;
+  line-height: 1.3;
+}
+
+.cosmic-sub-text {
+  font-size: 0.75rem;
+  color: #a1a1aa;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.active-controls-panel {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.accomplish-btn {
+  background-color: #10b981 !important;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25) !important;
+}
+
+.accomplish-btn:hover {
+  background-color: #059669 !important;
+}
+
+/* Accomplished Celebration layout */
+.manifestation-accomplished-layout {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+.accomplished-trophy-card {
+  background: #ffffff;
+  border: 1px solid #f2eedd;
+  border-radius: 20px;
+  padding: 32px 30px;
+  width: 100%;
+  box-shadow: 0 20px 45px rgba(0,0,0,0.08);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  animation: scaleUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-sizing: border-box;
+}
+
+.big-trophy-badge {
+  color: #eab308;
+  filter: drop-shadow(0 0 12px rgba(234, 179, 8, 0.35));
+  margin-bottom: 12px;
+}
+
+.animate-trophy-pulse {
+  animation: trophy-pulse-animation 2s ease-in-out infinite alternate;
+}
+
+@keyframes trophy-pulse-animation {
+  0% { transform: scale(1); }
+  100% { transform: scale(1.15) rotate(6deg); }
+}
+
+.accomplished-main-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 2.2rem;
+  font-weight: 900;
+  color: #10b981;
+  letter-spacing: 1px;
+  margin-bottom: 16px;
+}
+
+.accomplished-poster-mini {
+  width: 150px;
+  aspect-ratio: 1.42;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 2px solid #e2e8f0;
+  margin-bottom: 16px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+  transform: rotate(-3deg);
+}
+
+.mini-poster-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.accomplished-details-text {
+  font-size: 1rem;
+  color: #4b5563;
+  line-height: 1.5;
+  margin-bottom: 14px;
+  font-family: 'Quicksand', sans-serif;
+}
+
+.accomplished-dream-highlight {
+  color: #1e3a8a;
+}
+
+.accomplished-stats-pill {
+  background-color: #d1fae5;
+  color: #065f46;
+  font-weight: 700;
+  font-size: 0.95rem;
+  padding: 6px 20px;
+  border-radius: 9999px;
+  display: inline-block;
+  margin-bottom: 24px;
+  box-shadow: 0 2px 5px rgba(5, 150, 105, 0.15);
+  font-family: 'Quicksand', sans-serif;
+}
+
+.lets-manifest-block {
+  border-top: 1px dashed #e2e8f0;
+  padding-top: 20px;
+  width: 100%;
+}
+
+.lets-manifest-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.15rem;
+  color: #71717a;
+  margin-bottom: 12px;
+}
+
+.reset-btn {
+  background-color: #3b82f6 !important;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25) !important;
+  margin: 0 auto;
+}
+
+.reset-btn:hover {
+  background-color: #2563eb !important;
+}
+
+/* Homepage Wall of Fame styles */
+.homepage-wall-of-fame {
+  margin-top: 40px;
+  padding: 28px;
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-radius: 24px;
+  border: 1px solid rgba(226, 232, 240, 0.4);
+}
+
+.homepage-wall-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.8rem;
+  font-weight: 800;
+  color: #1f2937;
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.wall-trophy-icon {
+  color: #eab308;
+}
+
+.homepage-wall-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 28px;
+}
+
+.homepage-wall-card {
+  background: white;
+  padding: 10px 10px 14px 10px;
+  border-radius: 4px;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.05);
+  border: 1px solid #f2eedd;
+  transform: rotate(-1.5deg);
+  transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.homepage-wall-card:nth-child(2n) {
+  transform: rotate(2deg);
+}
+
+.homepage-wall-card:hover {
+  transform: scale(1.04) rotate(0deg) !important;
+  box-shadow: 0 12px 28px rgba(0,0,0,0.08);
+  z-index: 10;
+}
+
+.wall-card-img-container {
+  width: 100%;
+  aspect-ratio: 1.42;
+  border-radius: 2px;
+  overflow: hidden;
+  border: 1px solid #e7e5e4;
+}
+
+.wall-card-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.wall-card-body {
+  text-align: center;
+  margin-top: 10px;
+}
+
+.wall-card-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 1rem;
+  font-weight: 800;
+  color: #27272a;
+  margin-bottom: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wall-card-pill {
+  background-color: #fef3c7;
+  color: #d97706;
+  font-family: 'Caveat', cursive;
+  font-size: 1.25rem;
+  font-weight: 700;
+  padding: 2px 10px;
+  border-radius: 9999px;
+  display: inline-block;
+  box-shadow: 0 2px 4px rgba(217, 119, 6, 0.08);
+}
+
+/* Login Page Split Layout Pinned Board Styles */
+.login-split-container {
+  display: flex;
+  width: 100%;
+  max-width: 1100px;
+  height: 680px;
+  border-radius: 36px;
+  overflow: hidden;
+  box-shadow: 0 30px 70px rgba(0,0,0,0.25);
+  background: rgba(255, 255, 255, 0.4);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.login-pinned-board-side {
+  flex: 1.1;
+  background-color: #f7f4eb;
+  background-image: radial-gradient(#d6d3d1 1px, transparent 1px);
+  background-size: 20px 20px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid rgba(0, 0, 0, 0.05);
+  overflow-y: auto;
+}
+
+.login-pinned-board-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.5rem;
+  color: #44403c;
+  font-weight: 800;
+  text-align: center;
+  margin-bottom: 20px;
+  position: relative;
+  letter-spacing: 0.5px;
+}
+
+.login-pinned-board-title::after {
+  content: '';
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 40px;
+  height: 2px;
+  background-color: #e60023;
+}
+
+.login-pinned-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+/* Polaroid item pinned on login screen */
+.login-pinned-polaroid {
+  background: #ffffff;
+  padding: 8px 8px 14px 8px;
+  border-radius: 2px;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+  border: 1px solid #f1f0ea;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform: rotate(-1.5deg);
+}
+
+.login-pinned-polaroid:nth-child(2n) {
+  transform: rotate(2deg);
+}
+
+.login-pinned-polaroid:nth-child(3n) {
+  transform: rotate(-2.5deg);
+}
+
+.login-pinned-polaroid-img {
+  width: 100%;
+  aspect-ratio: 1.1;
+  object-fit: cover;
+  border-radius: 1px;
+}
+
+.login-pinned-polaroid-text {
+  font-family: 'Quicksand', cursive, sans-serif;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #57534e;
+  margin-top: 6px;
+  text-align: center;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.login-pinned-polaroid-category {
+  font-family: 'Playfair Display', serif;
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: #a8a29e;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+
+.login-glass-card-side {
+  flex: 0.9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+@media (max-width: 900px) {
+  .login-split-container {
+    flex-direction: column;
+    height: auto;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+  .login-pinned-board-side {
+    display: none; /* Hide board on small screens to prioritize login form */
+  }
+  .login-glass-card-side {
+    flex: 1;
+    background: transparent;
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scaleUp {
+  from { transform: scale(0.9); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
