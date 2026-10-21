@@ -539,7 +539,7 @@ test("Database: Live MySQL Integration Test Suite", async (t) => {
         "Cookie": `${userBTokenCookie}; evolve_csrf=${userBCsrf}`,
         "X-CSRF-Token": userBCsrf,
       },
-      body: JSON.stringify({ title: "Tampered by User B" }),
+      body: JSON.stringify({ title: "Tampered by User B", category: "health" }),
     });
     assert.equal(crossUpdateRes.status, 404, "User B must not be able to update User A's goal (update isolation)");
 
