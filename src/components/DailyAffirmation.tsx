@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Play, Pause, RotateCcw, Volume2, VolumeX } from 'lucide-react';
 import { getAffirmationVideo, type AffirmationVideo } from '../services/affirmationService';
+import { affirmationAudioApi } from '../services/api';
 
 export const DailyAffirmation: React.FC = () => {
   const [affirmation, setAffirmation] = useState<AffirmationVideo | null>(null);
@@ -23,10 +24,37 @@ export const DailyAffirmation: React.FC = () => {
   const [voiceMode, setVoiceMode] = useState<'ai' | 'custom'>('ai');
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
-  const [customAudioUrl, setCustomAudioUrl] = useState<string | null>(() => {
-    return localStorage.getItem('evolve_custom_affirmation_audio');
-  });
+  const [customAudioUrl, setCustomAudioUrl] = useState<string | null>(null);
   const [audioPermissionError, setAudioPermissionError] = useState<string | null>(null);
+
+  // Fetch audio from server
+  useEffect(() => {
+    let cancelled = false;
+    const fetchAudio = async () => {
+      try {
+        const res = await affirmationAudioApi.get();
+        if (!cancelled && res?.filePath) {
+          setCustomAudioUrl(res.filePath);
+        } else {
+          // Check local storage for legacy audio to migrate to backend
+          const localAudio = localStorage.getItem('evolve_custom_affirmation_audio');
+          if (localAudio && !cancelled) {
+            try {
+              const savedRes = await affirmationAudioApi.save(localAudio);
+              if (savedRes?.filePath) {
+                setCustomAudioUrl(savedRes.filePath);
+                localStorage.removeItem('evolve_custom_affirmation_audio');
+              }
+            } catch {}
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load custom affirmation audio:", err);
+      }
+    };
+    fetchAudio();
+    return () => { cancelled = true; };
+  }, []);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -53,7 +81,7 @@ export const DailyAffirmation: React.FC = () => {
         if (!cancelled) {
           setAffirmation(data);
         }
-      } catch (err) {
+      } catch (_err) {
         if (!cancelled) {
           setError('Unable to load affirmation video.');
         }
@@ -290,14 +318,15 @@ export const DailyAffirmation: React.FC = () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
         const reader = new FileReader();
         reader.readAsDataURL(audioBlob);
-        reader.onloadend = () => {
+        reader.onloadend = async () => {
           const base64data = reader.result as string;
           try {
-            localStorage.setItem('evolve_custom_affirmation_audio', base64data);
-            setCustomAudioUrl(base64data);
-          } catch (e) {
-            console.error('LocalStorage write failed:', e);
-            setError('Audio recording is too large to save in local storage. Try a shorter recording.');
+            const res = await affirmationAudioApi.save(base64data);
+            setCustomAudioUrl(res.filePath);
+            localStorage.removeItem('evolve_custom_affirmation_audio');
+          } catch (e: any) {
+            console.error('Audio save failed:', e);
+            setError(e.message || 'Audio recording failed to save to server.');
           }
         };
         stream.getTracks().forEach(track => track.stop());
@@ -333,7 +362,12 @@ export const DailyAffirmation: React.FC = () => {
     setIsRecording(false);
   };
 
-  const deleteRecording = () => {
+  const deleteRecording = async () => {
+    try {
+      await affirmationAudioApi.delete();
+    } catch (err) {
+      console.error("Failed to delete affirmation audio on server:", err);
+    }
     localStorage.removeItem('evolve_custom_affirmation_audio');
     setCustomAudioUrl(null);
     if (customAudioRef.current) {
@@ -358,20 +392,21 @@ export const DailyAffirmation: React.FC = () => {
       return;
     }
 
-    if (file.size > 2 * 1024 * 1024) {
-      setError('File is too large. Please select an audio file under 2MB.');
+    if (file.size > 10 * 1024 * 1024) {
+      setError('File is too large. Please select an audio file under 10MB.');
       return;
     }
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       const base64data = event.target?.result as string;
       try {
-        localStorage.setItem('evolve_custom_affirmation_audio', base64data);
-        setCustomAudioUrl(base64data);
-      } catch (err) {
-        console.error('LocalStorage write failed:', err);
-        setError('Failed to save audio file. The file is too large for local storage.');
+        const res = await affirmationAudioApi.save(base64data);
+        setCustomAudioUrl(res.filePath);
+        localStorage.removeItem('evolve_custom_affirmation_audio');
+      } catch (err: any) {
+        console.error('Save audio file failed:', err);
+        setError(err.message || 'Failed to save audio file to server.');
       }
     };
     reader.onerror = () => {
@@ -659,6 +694,7 @@ export const DailyAffirmation: React.FC = () => {
         <audio 
           ref={customAudioRef} 
           src={customAudioUrl} 
+          crossOrigin="use-credentials"
           onPlay={() => setIsPlaying(true)}
           onPause={() => setIsPlaying(false)}
         />

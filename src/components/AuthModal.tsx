@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { User } from '../types/goal';
-import { authApi, setAuthToken } from '../services/api';
+import { authApi } from '../services/api';
 import { ShieldCheck, Lock, Mail, X, User as UserIcon } from 'lucide-react';
 
 interface AuthModalProps {
@@ -29,7 +29,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setLoading(true);
     try {
       const result = await authApi.login(email, password);
-      setAuthToken(result.token);
       onLogin(result.user);
       onClose();
     } catch (err: any) {
@@ -44,9 +43,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setError('');
     setLoading(true);
     try {
-      await authApi.signup(name, email, password);
-      const result = await authApi.login(email, password);
-      setAuthToken(result.token);
+      const result = await authApi.signup(name, email, password);
       onLogin(result.user);
       onClose();
     } catch (err: any) {

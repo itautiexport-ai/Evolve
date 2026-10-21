@@ -7,26 +7,46 @@ interface EvolvePermissionsViewProps {
   setUsers: React.Dispatch<React.SetStateAction<User[]>>;
 }
 
+import { adminApi } from '../services/api';
+
 export const EvolvePermissionsView: React.FC<EvolvePermissionsViewProps> = ({
   users,
   setUsers,
 }) => {
-  const togglePermission = (
+  const togglePermission = async (
     userId: string, 
     field: 'accessMasters' | 'accessGoals' | 'accessAdmin' | 'accessGratitude' | 'accessMusic' | 'accessHabits' | 'accessGoalPlanner' | 'accessVisionBoard' | 'accessHabitsDashboard' | 'accessOverallDashboard'
   ) => {
-    setUsers(prev => prev.map(user => {
-      if (user.id !== userId) return user;
+    const targetUser = users.find(u => u.id === userId);
+    if (!targetUser) return;
+
+    const currentVal = targetUser[field] !== undefined 
+      ? targetUser[field] 
+      : (field === 'accessAdmin' ? targetUser.role === 'ADMIN' : true);
       
-      const currentVal = user[field] !== undefined 
-        ? user[field] 
-        : (field === 'accessAdmin' ? user.role === 'ADMIN' : true);
-        
-      return {
-        ...user,
-        [field]: !currentVal
-      };
-    }));
+    const updated = {
+      ...targetUser,
+      [field]: !currentVal
+    };
+
+    setUsers(prev => prev.map(user => user.id === userId ? updated : user));
+
+    try {
+      await adminApi.updatePermissions(userId, {
+        accessMasters: updated.accessMasters,
+        accessGoals: updated.accessGoals,
+        accessGoalPlanner: updated.accessGoalPlanner,
+        accessVisionBoard: updated.accessVisionBoard,
+        accessGratitude: updated.accessGratitude,
+        accessHabits: updated.accessHabits,
+        accessOverallDashboard: updated.accessOverallDashboard,
+        accessHabitsDashboard: updated.accessHabitsDashboard,
+        accessMusic: updated.accessMusic,
+        accessAdmin: updated.accessAdmin,
+      });
+    } catch (err) {
+      console.error("Failed to persist permissions to backend:", err);
+    }
   };
 
   return (

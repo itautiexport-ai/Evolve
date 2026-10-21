@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { Goal } from '../types/goal';
 import { Sparkles, Printer, X } from 'lucide-react';
 import confetti from 'canvas-confetti';
@@ -21,6 +21,8 @@ const CATEGORIES = [
   { key: 'growth', label: 'Personal Growth & Learning', icon: '🌱', defaultImg: 'https://images.unsplash.com/photo-1506784983877-45594efa4cbe?auto=format&fit=crop&w=800&q=80', defaultAspiration: 'Read 20 books & learn constantly' }
 ];
 
+import { visionBoardApi } from '../services/api';
+
 export const VisionBoardView: React.FC<VisionBoardViewProps> = () => {
   const [boardData, setBoardData] = useState<{
     [key: string]: { imageUrl: string; aspiration: string };
@@ -29,17 +31,6 @@ export const VisionBoardView: React.FC<VisionBoardViewProps> = () => {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        // Safety Clean: Remove any old generated URLs to migrate to the new Ghibli Art engine
-        let modified = false;
-        Object.keys(parsed).forEach(k => {
-          if (parsed[k]?.imageUrl && parsed[k].imageUrl.startsWith('http')) {
-            parsed[k].imageUrl = '';
-            modified = true;
-          }
-        });
-        if (modified) {
-          localStorage.setItem('evolve_vision_board_v3', JSON.stringify(parsed));
-        }
         return parsed;
       } catch (e) {
         console.error("Failed to parse vision board storage:", e);
@@ -59,22 +50,7 @@ export const VisionBoardView: React.FC<VisionBoardViewProps> = () => {
     return localStorage.getItem('evolve_vision_center_quote') || 'Ready to manifest my main character energy and level up!';
   });
 
-  const [loadedKeys, setLoadedKeys] = useState<{ [key: string]: boolean }>(() => {
-    const saved = localStorage.getItem('evolve_vision_board_v3');
-    const initial: any = {};
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        Object.keys(parsed).forEach(k => {
-          if (parsed[k]?.imageUrl) {
-            initial[k] = true;
-          }
-        });
-      } catch {}
-    }
-    return initial;
-  });
-
+  const [loadedKeys, setLoadedKeys] = useState<{ [key: string]: boolean }>({});
   const [imageErrorKeys, setImageErrorKeys] = useState<{ [key: string]: boolean }>({});
   const [isCollageView, setIsCollageView] = useState<boolean>(() => {
     return localStorage.getItem('evolve_vision_board_completed') === 'true';
@@ -85,6 +61,57 @@ export const VisionBoardView: React.FC<VisionBoardViewProps> = () => {
   const [boardOwner, setBoardOwner] = useState<string>(() => {
     return localStorage.getItem('evolve_vision_board_owner') || 'My';
   });
+
+  const isLoadedFromBackend = React.useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadVisionBoard = async () => {
+      try {
+        const res = await visionBoardApi.get();
+        if (!cancelled && res) {
+          if (res.boardData && Object.keys(res.boardData).length > 0) {
+            setBoardData(res.boardData);
+            if (res.centerQuote) setCenterQuote(res.centerQuote);
+            if (res.isCompleted !== undefined) setIsCollageView(res.isCompleted);
+            if (res.boardOwner) setBoardOwner(res.boardOwner);
+          } else {
+            // Check legacy local storage and import to cloud
+            const saved = localStorage.getItem('evolve_vision_board_v3');
+            if (saved) {
+              try {
+                const parsed = JSON.parse(saved);
+                const q = localStorage.getItem('evolve_vision_center_quote') || centerQuote;
+                const comp = localStorage.getItem('evolve_vision_board_completed') === 'true';
+                const owner = localStorage.getItem('evolve_vision_board_owner') || boardOwner;
+                await visionBoardApi.save({ boardData: parsed, centerQuote: q, isCompleted: comp, boardOwner: owner });
+              } catch {}
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load vision board from API:", err);
+      } finally {
+        isLoadedFromBackend.current = true;
+      }
+    };
+    loadVisionBoard();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Sync to database
+  useEffect(() => {
+    if (!isLoadedFromBackend.current) return;
+    const timeout = setTimeout(() => {
+      visionBoardApi.save({
+        boardData,
+        centerQuote,
+        isCompleted: isCollageView,
+        boardOwner,
+      }).catch(err => console.error("Failed to sync vision board:", err));
+    }, 600);
+    return () => clearTimeout(timeout);
+  }, [boardData, centerQuote, isCollageView, boardOwner]);
   
   const getRenderImageUrl = (key: string, baseUrl: string) => {
     if (!baseUrl) return '';

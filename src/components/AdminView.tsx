@@ -1,20 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { Goal, User, AdminLogEntry } from '../types/goal';
 import { INITIAL_ADMIN_LOGS, DEFAULT_ADMIN_USER, DEFAULT_REGULAR_USER } from '../data/authData';
 import { INITIAL_GOALS } from '../data/initialGoals';
+import { adminApi } from '../services/api';
 import { 
-  ShieldCheck, 
-  Users, 
-  Database, 
-  Trash2, 
-  Download, 
-  RotateCcw, 
-  Activity, 
-  CheckCircle, 
-  AlertTriangle,
-  PlusCircle,
-  FileText,
-  Key
+  CheckCircle, ShieldCheck, Download, RotateCcw, PlusCircle, 
+  Activity, Database, Users, FileText, Key, AlertTriangle, Trash2 
 } from 'lucide-react';
 
 interface AdminViewProps {
@@ -36,7 +27,19 @@ export const AdminView: React.FC<AdminViewProps> = ({
   const [activeAdminTab, setActiveAdminTab] = useState<'overview' | 'goals' | 'users' | 'logs'>(defaultTab || 'overview');
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
-  const addLog = (action: string, details: string) => {
+  useEffect(() => {
+    let cancelled = false;
+    adminApi.getLogs()
+      .then((logs: any[]) => {
+        if (!cancelled && Array.isArray(logs) && logs.length > 0) {
+          setAdminLogs(logs);
+        }
+      })
+      .catch((err) => console.warn("Could not fetch admin logs:", err));
+    return () => { cancelled = true; };
+  }, []);
+
+  const addLog = async (action: string, details: string) => {
     const newLog: AdminLogEntry = {
       id: 'log-' + Date.now(),
       timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
@@ -45,6 +48,11 @@ export const AdminView: React.FC<AdminViewProps> = ({
       details,
     };
     setAdminLogs(prev => [newLog, ...prev]);
+    try {
+      await adminApi.addLog(action, details);
+    } catch (err) {
+      console.warn("Could not persist admin log to server:", err);
+    }
   };
 
   const showNotification = (msg: string) => {

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import type { User } from '../types/goal';
 import type { Habit } from '../types/habit';
 import type { Goal } from '../types/goal';
+import { gratitudeApi, reviewsApi } from '../services/api';
 import { 
   Target, Heart, Calendar, Award, CheckCircle2, 
   Circle, Activity, ChevronRight, MessageSquare 
@@ -99,29 +100,52 @@ export const OverallDashboardView: React.FC<OverallDashboardViewProps> = ({
   // 3. Gratitude count
   const [gratitudeCount, setGratitudeCount] = useState(0);
   useEffect(() => {
-    const saved = localStorage.getItem('evolve_gratitude_entries');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        setGratitudeCount(Array.isArray(parsed) ? parsed.length : 0);
-      } catch (e) { console.error(e); }
-    }
+    let cancelled = false;
+    gratitudeApi.getAll()
+      .then(res => {
+        if (!cancelled && Array.isArray(res)) setGratitudeCount(res.length);
+      })
+      .catch(() => {
+        const saved = localStorage.getItem('evolve_gratitude_entries');
+        if (saved && !cancelled) {
+          try {
+            const parsed = JSON.parse(saved);
+            setGratitudeCount(Array.isArray(parsed) ? parsed.length : 0);
+          } catch {}
+        }
+      });
+    return () => { cancelled = true; };
   }, []);
 
   // 4. Latest Happiness Score
   const [latestHappiness, setLatestHappiness] = useState<number | null>(null);
   useEffect(() => {
-    const saved = localStorage.getItem('evolve_weekly_reviews_v1');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        const keys = Object.keys(parsed).sort(); // Sort keys ascending
-        if (keys.length > 0) {
-          const latestKey = keys[keys.length - 1];
-          setLatestHappiness(parsed[latestKey].happinessScore);
+    let cancelled = false;
+    reviewsApi.getAll()
+      .then(res => {
+        if (!cancelled && Array.isArray(res) && res.length > 0) {
+          // Sort by weekStartDate ascending
+          const sorted = [...res].sort((a, b) => a.weekStartDate.localeCompare(b.weekStartDate));
+          const latest = sorted[sorted.length - 1];
+          if (latest.happinessScore !== undefined) {
+            setLatestHappiness(latest.happinessScore);
+          }
         }
-      } catch (e) { console.error(e); }
-    }
+      })
+      .catch(() => {
+        const saved = localStorage.getItem('evolve_weekly_reviews_v1');
+        if (saved && !cancelled) {
+          try {
+            const parsed = JSON.parse(saved);
+            const keys = Object.keys(parsed).sort();
+            if (keys.length > 0) {
+              const latestKey = keys[keys.length - 1];
+              setLatestHappiness(parsed[latestKey].happinessScore);
+            }
+          } catch {}
+        }
+      });
+    return () => { cancelled = true; };
   }, []);
 
   return (

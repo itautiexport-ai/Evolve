@@ -17,12 +17,12 @@ const DEFAULT_TRACKS: MusicTrack[] = [
   { id: '4', title: 'Relaxing Zen Melody', description: 'Peaceful instrumental piano stream', url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3' }
 ];
 
+import { musicApi } from '../services/api';
+
 export const MusicPlayerView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'add' | 'list'>('list');
-  const [tracks, setTracks] = useState<MusicTrack[]>(() => {
-    const saved = localStorage.getItem('evolve_music_urls');
-    return saved ? JSON.parse(saved) : DEFAULT_TRACKS;
-  });
+  const [tracks, setTracks] = useState<MusicTrack[]>(DEFAULT_TRACKS);
+  const [loading, setLoading] = useState(true);
 
   // Form inputs state
   const [title, setTitle] = useState('');
@@ -37,10 +37,52 @@ export const MusicPlayerView: React.FC = () => {
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Sync tracks with localStorage
+  // Load tracks from database
   useEffect(() => {
-    localStorage.setItem('evolve_music_urls', JSON.stringify(tracks));
-  }, [tracks]);
+    let cancelled = false;
+    const loadTracks = async () => {
+      try {
+        setLoading(true);
+        const fetched = await musicApi.getAll();
+        if (!cancelled) {
+          if (Array.isArray(fetched) && fetched.length > 0) {
+            setTracks(fetched);
+          } else {
+            // Check legacy local storage
+            const saved = localStorage.getItem('evolve_music_urls');
+            if (saved) {
+              try {
+                const parsed = JSON.parse(saved);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                  // Import local tracks to cloud
+                  for (const tr of parsed) {
+                    await musicApi.create(tr.title, tr.description, tr.url);
+                  }
+                  localStorage.removeItem('evolve_music_urls');
+                  const updated = await musicApi.getAll();
+                  setTracks(updated);
+                  return;
+                }
+              } catch {}
+            }
+            // Seed default tracks to DB so user can customize
+            for (const dt of DEFAULT_TRACKS) {
+              await musicApi.create(dt.title, dt.description, dt.url);
+            }
+            const seeded = await musicApi.getAll();
+            setTracks(seeded.length > 0 ? seeded : DEFAULT_TRACKS);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load tracks from API:", err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    loadTracks();
+    return () => { cancelled = true; };
+  }, []);
 
   // Audio element setup
   useEffect(() => {
@@ -85,7 +127,7 @@ export const MusicPlayerView: React.FC = () => {
   };
 
   const getYouTubeId = (urlStr: string) => {
-    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
     const match = urlStr.match(regExp);
     return (match && match[2].length === 11) ? match[2] : null;
   };
@@ -141,35 +183,44 @@ export const MusicPlayerView: React.FC = () => {
   };
 
   // Add new track
-  const handleAddTrack = (e: React.FormEvent) => {
+  const handleAddTrack = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !url.trim()) {
       alert('Title and Audio URL are required.');
       return;
     }
 
-    const newTrack: MusicTrack = {
-      id: `track-${Date.now()}`,
-      title: title.trim(),
-      description: description.trim() || 'Custom soundscape link',
-      url: url.trim()
-    };
-
-    setTracks(prev => [...prev, newTrack]);
-    setTitle('');
-    setDescription('');
-    setUrl('');
-    setActiveTab('list');
+    try {
+      const created = await musicApi.create(
+        title.trim(),
+        description.trim() || 'Custom soundscape link',
+        url.trim()
+      );
+      setTracks(prev => [...prev, created]);
+      setTitle('');
+      setDescription('');
+      setUrl('');
+      setActiveTab('list');
+    } catch (err) {
+      console.error("Failed to add music track:", err);
+      alert('Could not save track. Please ensure the backend is available.');
+    }
   };
 
   // Delete track
-  const handleDeleteTrack = (id: string) => {
+  const handleDeleteTrack = async (id: string) => {
     if (currentTrackId === id && audioRef.current) {
       audioRef.current.pause();
       setCurrentTrackId(null);
       setIsPlaying(false);
     }
-    setTracks(prev => prev.filter(t => t.id !== id));
+    try {
+      await musicApi.delete(id);
+      setTracks(prev => prev.filter(t => t.id !== id));
+    } catch (err) {
+      console.error("Failed to delete track:", err);
+      setTracks(prev => prev.filter(t => t.id !== id));
+    }
   };
 
   return (
@@ -286,7 +337,11 @@ export const MusicPlayerView: React.FC = () => {
             )}
 
             {/* Tracks table */}
-            {tracks.length === 0 ? (
+            {loading ? (
+              <div className="glass-card text-center" style={{ padding: '40px 24px' }}>
+                <p style={{ fontSize: '0.88rem', color: '#64748b' }}>Loading soundscapes...</p>
+              </div>
+            ) : tracks.length === 0 ? (
               <div className="glass-card text-center" style={{ padding: '60px 24px' }}>
                 <Compass size={48} style={{ color: '#94a3b8', margin: '0 auto 12px' }} />
                 <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#334155' }}>No music URLs added</h3>

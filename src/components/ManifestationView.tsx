@@ -19,42 +19,54 @@ const MANIFESTATION_QUOTES = [
   "Trust the universe. Everything is unfolding for your highest good."
 ];
 
+import { manifestationApi } from '../services/api';
+
 export const ManifestationView: React.FC = () => {
-  const [current, setCurrent] = useState(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.current) return parsed.current;
-      } catch (e) {
-        console.error(e);
-      }
-    }
-    return {
-      title: '',
-      imageUrl: '',
-      startDate: null as string | null,
-      isAccomplished: false,
-      accomplishDate: null as string | null,
-      daysToAchieve: null as number | null
-    };
+  const [current, setCurrent] = useState({
+    title: '',
+    imageUrl: '',
+    startDate: null as string | null,
+    isAccomplished: false,
+    accomplishDate: null as string | null,
+    daysToAchieve: null as number | null
   });
 
-  const [accomplishedList, setAccomplishedList] = useState<any[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.accomplishedList) return parsed.accomplishedList;
-      } catch (e) {
-        console.error(e);
-      }
-    }
-    return [];
-  });
-
+  const [accomplishedList, setAccomplishedList] = useState<any[]>([]);
   const [dailyQuote, setDailyQuote] = useState('');
   const [isWaving, setIsWaving] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadData = async () => {
+      try {
+        const res = await manifestationApi.get();
+        if (!cancelled && res) {
+          if (res.current?.title || (res.accomplishedList && res.accomplishedList.length > 0)) {
+            if (res.current) setCurrent(res.current);
+            if (res.accomplishedList) setAccomplishedList(res.accomplishedList);
+          } else {
+            // Check legacy local storage and migrate
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (saved) {
+              try {
+                const parsed = JSON.parse(saved);
+                if (parsed.current) setCurrent(parsed.current);
+                if (parsed.accomplishedList) setAccomplishedList(parsed.accomplishedList);
+                await manifestationApi.save({
+                  current: parsed.current,
+                  accomplishedList: parsed.accomplishedList || [],
+                });
+              } catch {}
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load manifestations from API:", err);
+      }
+    };
+    loadData();
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     const day = new Date().getDate();
@@ -63,7 +75,9 @@ export const ManifestationView: React.FC = () => {
   }, []);
 
   const saveToStorage = (curr: any, list: any[]) => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ current: curr, accomplishedList: list }));
+    manifestationApi.save({ current: curr, accomplishedList: list }).catch(err => {
+      console.error("Failed to save manifestations to cloud:", err);
+    });
   };
 
   const playChimeSound = () => {

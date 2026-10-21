@@ -1,26 +1,65 @@
-const API_BASE_URL = "http://localhost:3001/api";
+const API_BASE_URL = "/api";
 
-function getToken(): string | null {
-  return localStorage.getItem("evolve_auth_token");
+// Clear legacy stored tokens on load
+if (typeof window !== "undefined" && window.localStorage) {
+  try {
+    localStorage.removeItem("evolve_auth_token");
+  } catch {
+    // Ignore storage errors in restricted contexts
+  }
+}
+
+function getCsrfTokenFromCookie(): string | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(/(?:^|;\s*)evolve_csrf=([^;]*)/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+// Session expired listener system
+type SessionExpiredHandler = () => void;
+const sessionExpiredHandlers: SessionExpiredHandler[] = [];
+
+export function onSessionExpired(handler: SessionExpiredHandler): () => void {
+  sessionExpiredHandlers.push(handler);
+  return () => {
+    const idx = sessionExpiredHandlers.indexOf(handler);
+    if (idx !== -1) sessionExpiredHandlers.splice(idx, 1);
+  };
+}
+
+function notifySessionExpired() {
+  clearAuthToken();
+  sessionExpiredHandlers.forEach((h) => h());
 }
 
 async function apiRequest(endpoint: string, options: RequestInit = {}) {
-  const token = getToken();
+  const csrfToken = getCsrfTokenFromCookie();
+
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...(options.headers as Record<string, string> ?? {}),
   };
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
+
+  const method = (options.method || "GET").toUpperCase();
+  if (["POST", "PUT", "DELETE", "PATCH"].includes(method) && csrfToken) {
+    headers["X-CSRF-Token"] = csrfToken;
   }
 
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
+    credentials: "include", // Essential for HttpOnly session cookies
     headers,
   });
 
+  if (response.status === 401) {
+    // Session expired or invalid
+    notifySessionExpired();
+    const error = await response.json().catch(() => ({ error: "Unauthorized" }));
+    throw new Error(error.error || "Session expired. Please log in again.");
+  }
+
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: "unknown error" }));
+    const error = await response.json().catch(() => ({ error: "Unknown error" }));
     throw new Error(error.error || `Request failed with status ${response.status}`);
   }
 
@@ -33,11 +72,24 @@ async function apiRequest(endpoint: string, options: RequestInit = {}) {
 
 // ---------- Auth ----------
 export const authApi = {
-  signup: (name: string, email: string, password: string) =>
-    apiRequest("/auth/signup", { method: "POST", body: JSON.stringify({ name, email, password }) }),
+  signup: (name: string, email: string, password: string, vibeName?: string) =>
+    apiRequest("/auth/signup", {
+      method: "POST",
+      body: JSON.stringify({ name, email, password, vibeName }),
+    }),
 
   login: (email: string, password: string) =>
-    apiRequest("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
+    apiRequest("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    }),
+
+  logout: () =>
+    apiRequest("/auth/logout", {
+      method: "POST",
+    }),
+
+  getMe: () => apiRequest("/auth/me"),
 };
 
 // ---------- Goals ----------
@@ -76,16 +128,16 @@ export const mastersApi = {
 // ---------- Gratitude ----------
 export const gratitudeApi = {
   getAll: () => apiRequest("/gratitude"),
-  create: (content: string, date?: string) =>
-    apiRequest("/gratitude", { method: "POST", body: JSON.stringify({ content, date }) }),
+  create: (content: string, category?: string, vibe?: string, date?: string) =>
+    apiRequest("/gratitude", { method: "POST", body: JSON.stringify({ content, category, vibe, date }) }),
   delete: (id: string) => apiRequest(`/gratitude/${id}`, { method: "DELETE" }),
 };
 
 // ---------- Weekly Reviews ----------
 export const reviewsApi = {
   getAll: () => apiRequest("/reviews"),
-  create: (weekStartDate: string, content: any) =>
-    apiRequest("/reviews", { method: "POST", body: JSON.stringify({ weekStartDate, content }) }),
+  save: (data: { weekStartDate?: string; weekKey?: string; happinessScore?: number; risks?: string[]; commitments?: string[]; content?: any }) =>
+    apiRequest("/reviews", { method: "POST", body: JSON.stringify(data) }),
   delete: (id: string) => apiRequest(`/reviews/${id}`, { method: "DELETE" }),
   clearAll: () => apiRequest("/reviews", { method: "DELETE" }),
 };
@@ -93,8 +145,8 @@ export const reviewsApi = {
 // ---------- Music ----------
 export const musicApi = {
   getAll: () => apiRequest("/music"),
-  create: (title: string, url: string) =>
-    apiRequest("/music", { method: "POST", body: JSON.stringify({ title, url }) }),
+  create: (title: string, description: string, url: string) =>
+    apiRequest("/music", { method: "POST", body: JSON.stringify({ title, description, url }) }),
   delete: (id: string) => apiRequest(`/music/${id}`, { method: "DELETE" }),
 };
 
@@ -106,10 +158,52 @@ export const affirmationAudioApi = {
   delete: () => apiRequest("/affirmation-audio", { method: "DELETE" }),
 };
 
-export function setAuthToken(token: string) {
-  localStorage.setItem("evolve_auth_token", token);
+// ---------- Vision Board ----------
+export const visionBoardApi = {
+  get: () => apiRequest("/vision-board"),
+  save: (data: { boardData?: any; centerQuote?: string; isCompleted?: boolean; boardOwner?: string }) =>
+    apiRequest("/vision-board", { method: "PUT", body: JSON.stringify(data) }),
+};
+
+// ---------- Manifestations ----------
+export const manifestationApi = {
+  get: () => apiRequest("/manifestations"),
+  save: (data: { current?: any; accomplishedList?: any[] }) =>
+    apiRequest("/manifestations", { method: "PUT", body: JSON.stringify(data) }),
+};
+
+// ---------- Preferences ----------
+export const preferencesApi = {
+  get: () => apiRequest("/preferences"),
+  save: (preferences: any) =>
+    apiRequest("/preferences", { method: "PUT", body: JSON.stringify({ preferences }) }),
+};
+
+// ---------- Admin Management ----------
+export const adminApi = {
+  getUsers: () => apiRequest("/admin/users"),
+  createUser: (userData: any) => apiRequest("/admin/users", { method: "POST", body: JSON.stringify(userData) }),
+  updateUser: (id: string, userData: any) =>
+    apiRequest(`/admin/users/${id}`, { method: "PUT", body: JSON.stringify(userData) }),
+  deleteUser: (id: string) => apiRequest(`/admin/users/${id}`, { method: "DELETE" }),
+  updatePermissions: (userId: string, permissions: any) =>
+    apiRequest(`/admin/permissions/${userId}`, { method: "PUT", body: JSON.stringify(permissions) }),
+  getLogs: () => apiRequest("/admin/logs"),
+  addLog: (action: string, details: string) =>
+    apiRequest("/admin/logs", { method: "POST", body: JSON.stringify({ action, details }) }),
+};
+
+export function setAuthToken(_token?: string) {
+  // Authentication uses HttpOnly cookies; ensure legacy tokens are purged
+  clearAuthToken();
 }
 
 export function clearAuthToken() {
-  localStorage.removeItem("evolve_auth_token");
+  if (typeof window !== "undefined" && window.localStorage) {
+    try {
+      localStorage.removeItem("evolve_auth_token");
+    } catch {
+      // Ignore errors
+    }
+  }
 }

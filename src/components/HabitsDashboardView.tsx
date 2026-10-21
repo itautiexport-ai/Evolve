@@ -6,6 +6,8 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
+import { reviewsApi } from '../services/api';
+
 interface WeeklyReview {
   weekKey: string; // YYYY-MM-DD (Sunday start date)
   happinessScore: number;
@@ -41,27 +43,76 @@ export const HabitsDashboardView: React.FC<HabitsDashboardViewProps> = ({
 
   const currentWeekKey = getWeekKey(new Date());
 
-  // State for reviews and check-in modal
-  const [reviews, setReviews] = useState<{ [weekKey: string]: WeeklyReview }>(() => {
-    const saved = localStorage.getItem(REVIEWS_STORAGE);
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
-    }
-    return {};
-  });
-
   const [selectedWeekKey, setSelectedWeekKey] = useState<string>(currentWeekKey);
   const [isModalOpen, setIsModalOpen] = useState(false);
-
-  // Modal form states
   const [formHappinessScore, setFormHappinessScore] = useState<number>(5);
-  const [formRisksText, setFormRisksText] = useState('');
-  const [formCommitmentsText, setFormCommitmentsText] = useState('');
+  const [formRisksText, setFormRisksText] = useState<string>('');
+  const [formCommitmentsText, setFormCommitmentsText] = useState<string>('');
 
-  // Sync to localStorage
+  // State for reviews and check-in modal
+  const [reviews, setReviews] = useState<{ [weekKey: string]: WeeklyReview }>({});
+  const [localReviewCount, setLocalReviewCount] = useState(0);
+
   useEffect(() => {
-    localStorage.setItem(REVIEWS_STORAGE, JSON.stringify(reviews));
-  }, [reviews]);
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const fetched = await reviewsApi.getAll();
+        if (!cancelled && Array.isArray(fetched)) {
+          const map: { [weekKey: string]: WeeklyReview } = {};
+          fetched.forEach((r: any) => {
+            map[r.weekKey] = {
+              weekKey: r.weekKey,
+              happinessScore: r.happinessScore,
+              risks: r.risks,
+              commitments: r.commitments,
+            };
+          });
+          setReviews(map);
+        }
+      } catch (err) {
+        console.error("Failed to load reviews:", err);
+      }
+    };
+    load();
+
+    const saved = localStorage.getItem(REVIEWS_STORAGE);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        const count = Object.keys(parsed).length;
+        if (count > 0) setLocalReviewCount(count);
+      } catch {}
+    }
+
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleImportLocalReviews = async () => {
+    const saved = localStorage.getItem(REVIEWS_STORAGE);
+    if (!saved) return;
+    try {
+      const parsed = JSON.parse(saved);
+      for (const weekKey of Object.keys(parsed)) {
+        await reviewsApi.save(parsed[weekKey]);
+      }
+      localStorage.removeItem(REVIEWS_STORAGE);
+      setLocalReviewCount(0);
+      const fetched = await reviewsApi.getAll();
+      const map: { [weekKey: string]: WeeklyReview } = {};
+      fetched.forEach((r: any) => {
+        map[r.weekKey] = {
+          weekKey: r.weekKey,
+          happinessScore: r.happinessScore,
+          risks: r.risks,
+          commitments: r.commitments,
+        };
+      });
+      setReviews(map);
+    } catch (err) {
+      console.error("Failed to import local reviews:", err);
+    }
+  };
 
   // Calculate Implementation Score for the SELECTED week
   const getWeeklyImplementationStats = (weekKeyStr: string) => {
@@ -140,18 +191,18 @@ export const HabitsDashboardView: React.FC<HabitsDashboardViewProps> = ({
   };
 
   // Handle saving the review
-  const handleSaveReview = (e: React.FormEvent) => {
+  const handleSaveReview = async (e: React.FormEvent) => {
     e.preventDefault();
     
     const parsedRisks = formRisksText
       .split('\n')
-      .map(r => r.trim())
-      .filter(r => r.length > 0);
+      .map((r: string) => r.trim())
+      .filter((r: string) => r.length > 0);
 
     const parsedCommitments = formCommitmentsText
       .split('\n')
-      .map(c => c.trim())
-      .filter(c => c.length > 0);
+      .map((c: string) => c.trim())
+      .filter((c: string) => c.length > 0);
 
     const updatedReview: WeeklyReview = {
       weekKey: selectedWeekKey,
@@ -160,10 +211,15 @@ export const HabitsDashboardView: React.FC<HabitsDashboardViewProps> = ({
       commitments: parsedCommitments
     };
 
-    setReviews(prev => ({
-      ...prev,
-      [selectedWeekKey]: updatedReview
-    }));
+    try {
+      await reviewsApi.save(updatedReview);
+      setReviews(prev => ({
+        ...prev,
+        [selectedWeekKey]: updatedReview
+      }));
+    } catch (err) {
+      console.error("Failed to persist weekly review:", err);
+    }
 
     setIsModalOpen(false);
 
@@ -179,15 +235,20 @@ export const HabitsDashboardView: React.FC<HabitsDashboardViewProps> = ({
     }
   };
 
-  const handleResetAllReviews = () => {
+  const handleResetAllReviews = async () => {
     if (window.confirm('Are you sure you want to reset all weekly reviews? This will delete all your logged reviews and happiness history.')) {
-      setReviews({});
-      localStorage.removeItem(REVIEWS_STORAGE);
-      confetti({
-        particleCount: 50,
-        spread: 40,
-        colors: ['#ef4444', '#f87171']
-      });
+      try {
+        await reviewsApi.clearAll();
+        setReviews({});
+        localStorage.removeItem(REVIEWS_STORAGE);
+        confetti({
+          particleCount: 50,
+          spread: 40,
+          colors: ['#ef4444', '#f87171']
+        });
+      } catch (err) {
+        console.error("Failed to clear weekly reviews:", err);
+      }
     }
   };
 
@@ -289,6 +350,24 @@ export const HabitsDashboardView: React.FC<HabitsDashboardViewProps> = ({
               ))}
             </select>
           </div>
+
+          {localReviewCount > 0 && (
+            <button
+              onClick={handleImportLocalReviews}
+              className="flex items-center gap-2 text-xs font-bold border px-4 py-2.5 rounded-xl transition-all"
+              style={{
+                background: '#fef3c7',
+                borderRadius: '14px',
+                border: '1.5px solid #fde68a',
+                padding: '10px 16px',
+                cursor: 'pointer',
+                fontWeight: 750,
+                color: '#92400e',
+              }}
+            >
+              📥 Import {localReviewCount} Local Review{localReviewCount > 1 ? 's' : ''}
+            </button>
+          )}
 
           <button
             onClick={handleResetAllReviews}

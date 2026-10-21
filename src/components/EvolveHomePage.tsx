@@ -3,6 +3,7 @@ import { EvolveLogo } from './EvolveLogo';
 import { DailyAffirmation } from './DailyAffirmation';
 import type { User, MasterItem, Goal } from '../types/goal';
 import { Trophy } from 'lucide-react';
+import { manifestationApi } from '../services/api';
 // Unused icon imports removed to prevent lint errors
 
 const MOTIVATIONAL_QUOTES = [
@@ -40,17 +41,23 @@ export const EvolveHomePage: React.FC<EvolveHomePageProps> = ({
   const [accomplishedManifestations, setAccomplishedManifestations] = useState<any[]>([]);
 
   useEffect(() => {
-    const saved = localStorage.getItem('evolve_manifestation_module_v3');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.accomplishedList) {
-          setAccomplishedManifestations(parsed.accomplishedList);
+    let cancelled = false;
+    manifestationApi.get()
+      .then(res => {
+        if (!cancelled && res?.accomplishedList) {
+          setAccomplishedManifestations(res.accomplishedList);
         }
-      } catch (e) {
-        console.error("Failed to load accomplishments on home page:", e);
-      }
-    }
+      })
+      .catch(() => {
+        const saved = localStorage.getItem('evolve_manifestation_module_v3');
+        if (saved && !cancelled) {
+          try {
+            const parsed = JSON.parse(saved);
+            if (parsed.accomplishedList) setAccomplishedManifestations(parsed.accomplishedList);
+          } catch {}
+        }
+      });
+    return () => { cancelled = true; };
   }, []);
 
   // Determine Quote of the Day dynamically based on the current day of the year

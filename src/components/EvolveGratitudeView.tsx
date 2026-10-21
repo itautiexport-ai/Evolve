@@ -34,18 +34,12 @@ const VIBES = [
   { emoji: '❤️', label: 'Loved', color: '#ef4444' }
 ];
 
+import { gratitudeApi } from '../services/api';
+
 export const EvolveGratitudeView: React.FC<EvolveGratitudeViewProps> = ({ currentUser }) => {
-  const [entries, setEntries] = useState<GratitudeEntry[]>(() => {
-    const saved = localStorage.getItem(GRATITUDE_STORAGE);
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error(e);
-      }
-    }
-    return [];
-  });
+  const [entries, setEntries] = useState<GratitudeEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [localImportCount, setLocalImportCount] = useState<number>(0);
 
   const [activeTab, setActiveTab] = useState<'journal' | 'list'>('journal');
   const [content, setContent] = useState('');
@@ -54,44 +48,94 @@ export const EvolveGratitudeView: React.FC<EvolveGratitudeViewProps> = ({ curren
   const [successMsg, setSuccessMsg] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Fetch entries from backend
   useEffect(() => {
-    localStorage.setItem(GRATITUDE_STORAGE, JSON.stringify(entries));
-  }, [entries]);
+    let cancelled = false;
+    const load = async () => {
+      try {
+        setLoading(true);
+        const data = await gratitudeApi.getAll();
+        if (!cancelled) {
+          setEntries(data);
+        }
+      } catch (err) {
+        console.error("Failed to load gratitude entries:", err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    load();
 
-  const userEntries = entries.filter(e => e.userId === currentUser.id);
+    // Check for legacy local data available for import
+    const saved = localStorage.getItem(GRATITUDE_STORAGE);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setLocalImportCount(parsed.length);
+        }
+      } catch {}
+    }
+
+    return () => { cancelled = true; };
+  }, [currentUser.id]);
+
+  const handleImportLocal = async () => {
+    const saved = localStorage.getItem(GRATITUDE_STORAGE);
+    if (!saved) return;
+    try {
+      const parsed: GratitudeEntry[] = JSON.parse(saved);
+      for (const item of parsed) {
+        await gratitudeApi.create(item.content, item.category, item.vibe, item.date);
+      }
+      localStorage.removeItem(GRATITUDE_STORAGE);
+      setLocalImportCount(0);
+      const refreshed = await gratitudeApi.getAll();
+      setEntries(refreshed);
+      setSuccessMsg(`Successfully imported ${parsed.length} reflections to your cloud account! ✨`);
+      setTimeout(() => setSuccessMsg(''), 4000);
+    } catch (err) {
+      console.error("Failed to import local gratitude data:", err);
+    }
+  };
+
+  const userEntries = entries;
   const filteredEntries = userEntries;
 
-  const handleAddEntry = (e: React.FormEvent) => {
+  const handleAddEntry = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!content.trim()) return;
+    if (!content.trim() || isSubmitting) return;
 
     setIsSubmitting(true);
-
-    const newEntry: GratitudeEntry = {
-      id: `entry-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      userId: currentUser.id,
-      content: content.trim(),
-      category,
-      vibe,
-      date: new Date().toISOString().split('T')[0]
-    };
-
-    setTimeout(() => {
-      setEntries(prev => [newEntry, ...prev]);
+    try {
+      const created = await gratitudeApi.create(
+        content.trim(),
+        category,
+        vibe,
+        new Date().toISOString().split('T')[0]
+      );
+      setEntries(prev => [created, ...prev]);
       setContent('');
       setCategory(CATEGORIES[0]);
       setVibe(VIBES[2].emoji);
-      setIsSubmitting(false);
       setSuccessMsg('Your reflection has been saved 🌟');
       setTimeout(() => setSuccessMsg(''), 3000);
-      // Auto switch to list tab to see new entry
       setTimeout(() => setActiveTab('list'), 800);
-    }, 400);
+    } catch (err) {
+      console.error("Failed to add gratitude entry:", err);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleDeleteEntry = (id: string) => {
+  const handleDeleteEntry = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this gratitude entry?')) {
-      setEntries(prev => prev.filter(e => e.id !== id));
+      try {
+        await gratitudeApi.delete(id);
+        setEntries(prev => prev.filter(e => e.id !== id));
+      } catch (err) {
+        console.error("Failed to delete gratitude entry:", err);
+      }
     }
   };
 
@@ -135,6 +179,15 @@ export const EvolveGratitudeView: React.FC<EvolveGratitudeViewProps> = ({ curren
         >
           📜 Gratitude List ({filteredEntries.length})
         </button>
+        {localImportCount > 0 && (
+          <button
+            onClick={handleImportLocal}
+            className="gj-vibe-pill"
+            style={{ padding: '10px 20px', fontSize: '0.85rem', fontWeight: 700, backgroundColor: '#fef3c7', color: '#92400e', borderColor: '#fde68a' }}
+          >
+            📥 Import {localImportCount} Local Reflection{localImportCount > 1 ? 's' : ''} to Cloud
+          </button>
+        )}
       </div>
 
       {/* Main Content Switcher */}
@@ -227,7 +280,11 @@ export const EvolveGratitudeView: React.FC<EvolveGratitudeViewProps> = ({ curren
         ) : (
           /* Reflections Listing Tab */
           <div className="gj-timeline-panel" style={{ width: '100%', maxWidth: '800px' }}>
-            {filteredEntries.length === 0 ? (
+            {loading ? (
+              <div className="gj-timeline-card text-center" style={{ padding: '40px 24px' }}>
+                <p style={{ fontSize: '0.88rem', color: '#64748b' }}>Loading reflections...</p>
+              </div>
+            ) : filteredEntries.length === 0 ? (
               <div className="gj-timeline-card text-center" style={{ padding: '60px 24px' }}>
                 <Heart size={48} style={{ color: '#ec4899', margin: '0 auto 12px', opacity: 0.7 }} />
                 <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#334155' }}>No reflections recorded</h3>

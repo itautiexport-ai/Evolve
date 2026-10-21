@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { User } from '../types/goal';
 import { Users, Plus, Trash2, UserCheck, ClipboardList, Edit2, ShieldAlert } from 'lucide-react';
+import { adminApi } from '../services/api';
 
 interface EvolveUsersViewProps {
   users: User[];
@@ -66,7 +67,7 @@ export const EvolveUsersView: React.FC<EvolveUsersViewProps> = ({
     setActiveTab('list');
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
     setSuccessMsg('');
@@ -78,7 +79,7 @@ export const EvolveUsersView: React.FC<EvolveUsersViewProps> = ({
     }
 
     // Validations
-    if (!userId.trim() || !name.trim() || !vibeName.trim() || !password.trim()) {
+    if (!userId.trim() || !name.trim() || !vibeName.trim() || (!editingUser && !password.trim())) {
       setFormError('All fields are required.');
       return;
     }
@@ -86,90 +87,89 @@ export const EvolveUsersView: React.FC<EvolveUsersViewProps> = ({
     const uppercaseId = userId.trim().toUpperCase();
 
     if (editingUser) {
-      // If changing the ID, verify the new ID is not already used by another user
-      if (uppercaseId !== editingUser.id.toUpperCase()) {
-        const isIdTaken = users.some(u => u.id.toUpperCase() === uppercaseId);
-        if (isIdTaken) {
-          setFormError(`User ID "${uppercaseId}" is already taken.`);
-          return;
+      const updatedData: any = {
+        name: name.trim(),
+        vibeName: vibeName.trim(),
+        role,
+      };
+      if (password.trim()) {
+        updatedData.password = password.trim();
+      }
+
+      try {
+        await adminApi.updateUser(editingUser.id, updatedData);
+        const updatedUser: User = {
+          ...editingUser,
+          name: name.trim(),
+          vibeName: vibeName.trim(),
+          role,
+          password: password || editingUser.password,
+        };
+
+        setUsers(prev => prev.map(u => u.id === editingUser.id ? updatedUser : u));
+
+        if (editingUser.id === currentUser.id) {
+          onSwitchUser(updatedUser);
         }
+
+        setSuccessMsg(`User "${name.trim()}" successfully updated in database!`);
+        setEditingUser(null);
+        setUserId('');
+        setName('');
+        setVibeName('');
+        setPassword('');
+        setRole('USER');
+
+        setTimeout(() => {
+          setSuccessMsg('');
+          setActiveTab('list');
+        }, 1200);
+      } catch (err: any) {
+        setFormError(err.message || "Failed to update user in database.");
       }
-
-      // Update Mode
-      const updatedUser = {
-        ...editingUser,
-        id: uppercaseId, // Apply the updated User ID
-        name: name.trim(),
-        email: `${name.trim().toLowerCase().replace(/\s+/g, '')}@lifegoals.com`,
-        role: role,
-        vibeName: vibeName.trim(),
-        password: password,
-      };
-
-      setUsers(prev => prev.map(u => u.id === editingUser.id ? updatedUser : u));
-
-      // If editing the currently logged in user, update the active session instantly
-      if (editingUser.id === currentUser.id) {
-        onSwitchUser(updatedUser);
-      }
-
-      setSuccessMsg(`User "${name.trim()}" successfully updated!`);
-      setEditingUser(null);
-
-      // Reset form states
-      setUserId('');
-      setName('');
-      setVibeName('');
-      setPassword('');
-      setRole('USER');
-
-      setTimeout(() => {
-        setSuccessMsg('');
-        setActiveTab('list');
-      }, 1500);
-
     } else {
-      // Create Mode
-      const isIdTaken = users.some(u => u.id.toUpperCase() === uppercaseId);
-      if (isIdTaken) {
-        setFormError(`User ID "${uppercaseId}" is already taken.`);
-        return;
+      const email = `${name.trim().toLowerCase().replace(/\s+/g, '')}@evolve.local`;
+      try {
+        const created = await adminApi.createUser({
+          id: uppercaseId,
+          name: name.trim(),
+          email,
+          password: password.trim(),
+          role,
+          vibeName: vibeName.trim(),
+        });
+
+        setUsers(prev => [...prev, created]);
+        setUserId('');
+        setName('');
+        setVibeName('');
+        setPassword('');
+        setRole('USER');
+        setSuccessMsg(`User "${created.name}" successfully created in database!`);
+
+        setTimeout(() => {
+          setSuccessMsg('');
+          setActiveTab('list');
+        }, 1200);
+      } catch (err: any) {
+        setFormError(err.message || "Failed to create user in database.");
       }
-
-      const newUser: User = {
-        id: uppercaseId,
-        name: name.trim(),
-        email: `${name.trim().toLowerCase().replace(/\s+/g, '')}@lifegoals.com`,
-        role: role,
-        vibeName: vibeName.trim(),
-        password: password,
-        joinedDate: new Date().toISOString().split('T')[0],
-      };
-
-      setUsers(prev => [...prev, newUser]);
-      
-      setUserId('');
-      setName('');
-      setVibeName('');
-      setPassword('');
-      setRole('USER');
-      setSuccessMsg(`User "${newUser.name}" successfully created!`);
-      
-      setTimeout(() => {
-        setSuccessMsg('');
-        setActiveTab('list');
-      }, 1500);
     }
   };
 
-  const handleDeleteUser = (idToDelete: string) => {
+  const handleDeleteUser = async (idToDelete: string) => {
     if (idToDelete === currentUser.id) {
-      alert('You cannot delete the currently logged in user.');
+      alert('You cannot delete the currently logged in administrator.');
       return;
     }
 
-    if (window.confirm(`Are you sure you want to delete user ${idToDelete}?`)) {
-      setUsers(prev => prev.filter(u => u.id !== idToDelete));
+    if (window.confirm(`Are you sure you want to delete user ${idToDelete}? This will permanently delete their account and associated data.`)) {
+      try {
+        await adminApi.deleteUser(idToDelete);
+        setUsers(prev => prev.filter(u => u.id !== idToDelete));
+      } catch (err: any) {
+        alert(err.message || "Failed to delete user.");
+      }
     }
   };
 

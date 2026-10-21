@@ -1,101 +1,344 @@
 import express from "express";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
-import { pool } from "../db/mysql/connection.js";
 import jwt from "jsonwebtoken";
+import { env } from "../config/env.js";
+import { pool } from "../db/mysql/connection.js";
+import {
+  requireAuth,
+  generateToken,
+  setAuthCookies,
+  clearAuthCookies,
+  protectAuthCrossOrigin,
+  checkLoginRateLimit,
+  recordFailedLogin,
+  clearLoginRateLimit,
+  type AuthenticatedRequest,
+} from "../middleware/auth.js";
 
 export const authRouter = express.Router();
 
-authRouter.post("/signup", async (req, res) => {
+function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+// POST /api/auth/signup
+authRouter.post("/signup", protectAuthCrossOrigin, async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, vibeName } = req.body;
 
-    if (!name || !email || !password) {
-      return res.status(400).json({ error: "name, email, and password are required" });
+    if (!name || typeof name !== "string" || !name.trim()) {
+      res.status(400).json({ error: "full name is required" });
+      return;
     }
-    if (password.length < 6) {
-      return res.status(400).json({ error: "password must be at least 6 characters" });
+    if (!email || typeof email !== "string" || !isValidEmail(email.trim())) {
+      res.status(400).json({ error: "a valid email address is required" });
+      return;
+    }
+    if (!password || typeof password !== "string" || password.length < 6) {
+      res.status(400).json({ error: "password must be at least 6 characters" });
+      return;
     }
 
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanName = name.trim();
+    const cleanVibe = typeof vibeName === "string" ? vibeName.trim() : null;
+
+    // Check duplicate email
     const [existing] = await pool.query<any[]>(
       "SELECT id FROM users WHERE email = ?",
-      [email]
+      [cleanEmail]
     );
     if (existing.length > 0) {
-      return res.status(409).json({ error: "email already registered" });
+      res.status(409).json({ error: "email already registered" });
+      return;
     }
 
     const id = crypto.randomUUID();
     const passwordHash = await bcrypt.hash(password, 10);
     const joinedDate = new Date().toISOString().split("T")[0];
 
+    // Enforce role = 'USER' to prevent unauthorized role escalation
     await pool.query(
-      `INSERT INTO users (id, name, email, password_hash, role, joined_date)
-       VALUES (?, ?, ?, ?, 'USER', ?)`,
-      [id, name, email, passwordHash, joinedDate]
+      `INSERT INTO users (id, name, email, password_hash, role, vibe_name, joined_date)
+       VALUES (?, ?, ?, ?, 'USER', ?, ?)`,
+      [id, cleanName, cleanEmail, passwordHash, cleanVibe, joinedDate]
     );
 
-    res.status(201).json({
+    // Create default permissions
+    try {
+      await pool.query(
+        `INSERT INTO user_permissions (user_id, access_masters, access_goals, access_goal_planner, access_vision_board, access_gratitude, access_habits, access_overall_dashboard, access_habits_dashboard, access_music, access_admin)
+         VALUES (?, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0)
+         ON DUPLICATE KEY UPDATE user_id = VALUES(user_id)`,
+        [id]
+      );
+    } catch (permErr) {
+      console.warn("Could not insert default permissions:", permErr);
+    }
+
+    // Create revocable session record
+    const sessionId = crypto.randomUUID();
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    try {
+      await pool.query(
+        "INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)",
+        [sessionId, id, expiresAt]
+      );
+    } catch (sessErr) {
+      console.warn("Could not insert session row:", sessErr);
+    }
+
+    const token = generateToken({ sessionId, userId: id, role: "USER" });
+    const csrfToken = setAuthCookies(res, token);
+
+    const userObj = {
       id,
-      name,
-      email,
-      role: "USER",
+      name: cleanName,
+      email: cleanEmail,
+      role: "USER" as const,
+      vibeName: cleanVibe || undefined,
       joinedDate,
+      accessMasters: true,
+      accessGoals: true,
+      accessGoalPlanner: true,
+      accessVisionBoard: true,
+      accessGratitude: true,
+      accessHabits: true,
+      accessOverallDashboard: true,
+      accessHabitsDashboard: true,
+      accessMusic: true,
+      accessAdmin: false,
+    };
+
+    res.status(201).json({
+      csrfToken,
+      user: userObj,
     });
   } catch (err) {
     console.error("Signup error:", err);
-    res.status(500).json({ error: "internal server error" });
+    res.status(500).json({ error: "internal server error during signup" });
   }
 });
 
-authRouter.post("/login", async (req, res) => {
+// POST /api/auth/login
+authRouter.post("/login", protectAuthCrossOrigin, async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    if (!email || !password) {
-      return res.status(400).json({ error: "email and password are required" });
+    if (!email || typeof email !== "string" || !password || typeof password !== "string") {
+      res.status(400).json({ error: "email and password are required" });
+      return;
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const rateLimitKey = `${req.ip || "unknown"}_${cleanEmail}`;
+
+    const rateCheck = checkLoginRateLimit(rateLimitKey);
+    if (!rateCheck.allowed) {
+      res.status(429).json({
+        error: `Too many failed login attempts. Please try again in ${rateCheck.remainingWaitSec} seconds.`,
+      });
+      return;
     }
 
     const [rows] = await pool.query<any[]>(
-      "SELECT id, name, email, password_hash, role, avatar, joined_date FROM users WHERE email = ?",
-      [email]
+      `SELECT id, name, email, password_hash, role, avatar, vibe_name, joined_date 
+       FROM users WHERE email = ?`,
+      [cleanEmail]
     );
 
     if (rows.length === 0) {
-      return res.status(401).json({ error: "invalid email or password" });
+      recordFailedLogin(rateLimitKey);
+      res.status(401).json({ error: "invalid email or password" });
+      return;
     }
 
     const user = rows[0];
     const passwordMatches = await bcrypt.compare(password, user.password_hash);
 
     if (!passwordMatches) {
-      return res.status(401).json({ error: "invalid email or password" });
+      recordFailedLogin(rateLimitKey);
+      res.status(401).json({ error: "invalid email or password" });
+      return;
     }
 
-    const jwtSecret = process.env.JWT_SECRET;
-    if (!jwtSecret) {
-      throw new Error("JWT_SECRET is not set in environment variables");
+    clearLoginRateLimit(rateLimitKey);
+
+    // Fetch permissions
+    let permissions: any = {};
+    try {
+      const [permRows] = await pool.query<any[]>(
+        "SELECT * FROM user_permissions WHERE user_id = ?",
+        [user.id]
+      );
+      if (permRows.length > 0) {
+        permissions = permRows[0];
+      }
+    } catch (permErr) {
+      console.warn("Could not query user_permissions:", permErr);
     }
 
-    const token = jwt.sign(
-      { userId: user.id, email: user.email, role: user.role },
-      jwtSecret,
-      { expiresIn: "7d" }
-    );
+    // Create revocable session record
+    const sessionId = crypto.randomUUID();
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    try {
+      await pool.query(
+        "INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)",
+        [sessionId, user.id, expiresAt]
+      );
+    } catch (sessErr) {
+      console.warn("Could not insert session row:", sessErr);
+    }
+
+    const token = generateToken({ sessionId, userId: user.id, role: user.role });
+    const csrfToken = setAuthCookies(res, token);
+
+    const userObj = {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      avatar: user.avatar || undefined,
+      vibeName: user.vibe_name || undefined,
+      joinedDate: user.joined_date,
+      accessMasters: permissions.access_masters !== undefined ? !!permissions.access_masters : true,
+      accessGoals: permissions.access_goals !== undefined ? !!permissions.access_goals : true,
+      accessGoalPlanner: permissions.access_goal_planner !== undefined ? !!permissions.access_goal_planner : true,
+      accessVisionBoard: permissions.access_vision_board !== undefined ? !!permissions.access_vision_board : true,
+      accessGratitude: permissions.access_gratitude !== undefined ? !!permissions.access_gratitude : true,
+      accessHabits: permissions.access_habits !== undefined ? !!permissions.access_habits : true,
+      accessOverallDashboard: permissions.access_overall_dashboard !== undefined ? !!permissions.access_overall_dashboard : true,
+      accessHabitsDashboard: permissions.access_habits_dashboard !== undefined ? !!permissions.access_habits_dashboard : true,
+      accessMusic: permissions.access_music !== undefined ? !!permissions.access_music : true,
+      accessAdmin: permissions.access_admin !== undefined ? !!permissions.access_admin : user.role === "ADMIN",
+    };
 
     res.json({
-      token,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        avatar: user.avatar,
-        joinedDate: user.joined_date,
-      },
+      csrfToken,
+      user: userObj,
     });
   } catch (err) {
     console.error("Login error:", err);
-    res.status(500).json({ error: "internal server error" });
+    res.status(500).json({ error: "internal server error during login" });
+  }
+});
+
+// POST /api/auth/logout
+authRouter.post("/logout", async (req, res) => {
+  const token = req.cookies?.evolve_token;
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, env.auth.jwtSecret) as any;
+      if (decoded?.sessionId) {
+        await pool.query("DELETE FROM sessions WHERE id = ?", [decoded.sessionId]);
+      }
+    } catch {
+      // Token expired or invalid; ignore and clear cookies
+    }
+  }
+  clearAuthCookies(res);
+  res.json({ message: "logged out successfully" });
+});
+
+// POST /api/auth/change-password
+authRouter.post("/change-password", requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword || typeof newPassword !== "string" || newPassword.length < 6) {
+      res.status(400).json({ error: "new password must be at least 6 characters" });
+      return;
+    }
+
+    const [rows] = await pool.query<any[]>("SELECT password_hash FROM users WHERE id = ?", [req.userId]);
+    if (rows.length === 0) {
+      res.status(404).json({ error: "user not found" });
+      return;
+    }
+
+    const isMatch = await bcrypt.compare(currentPassword, rows[0].password_hash);
+    if (!isMatch) {
+      res.status(401).json({ error: "current password does not match" });
+      return;
+    }
+
+    const newHash = await bcrypt.hash(newPassword, 10);
+    await pool.query("UPDATE users SET password_hash = ? WHERE id = ?", [newHash, req.userId]);
+
+    // Revoke all existing sessions for this user on password reset
+    await pool.query("DELETE FROM sessions WHERE user_id = ?", [req.userId]);
+
+    // Issue a fresh new session for current user
+    const sessionId = crypto.randomUUID();
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    await pool.query(
+      "INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)",
+      [sessionId, req.userId, expiresAt]
+    );
+    const token = generateToken({ sessionId, userId: req.userId!, role: req.userRole });
+    const csrfToken = setAuthCookies(res, token);
+
+    res.json({ message: "password updated successfully", csrfToken });
+  } catch (err) {
+    console.error("Change password error:", err);
+    res.status(500).json({ error: "failed to change password" });
+  }
+});
+
+// GET /api/auth/me
+authRouter.get("/me", requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const [rows] = await pool.query<any[]>(
+      `SELECT id, name, email, role, avatar, vibe_name, joined_date 
+       FROM users WHERE id = ?`,
+      [req.userId]
+    );
+
+    if (rows.length === 0) {
+      clearAuthCookies(res);
+      res.status(401).json({ error: "user no longer exists" });
+      return;
+    }
+
+    const user = rows[0];
+
+    // Fetch permissions
+    let permissions: any = {};
+    try {
+      const [permRows] = await pool.query<any[]>(
+        "SELECT * FROM user_permissions WHERE user_id = ?",
+        [user.id]
+      );
+      if (permRows.length > 0) {
+        permissions = permRows[0];
+      }
+    } catch (permErr) {
+      console.warn("Could not query user_permissions:", permErr);
+    }
+
+    const userObj = {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      avatar: user.avatar || undefined,
+      vibeName: user.vibe_name || undefined,
+      joinedDate: user.joined_date,
+      accessMasters: permissions.access_masters !== undefined ? !!permissions.access_masters : true,
+      accessGoals: permissions.access_goals !== undefined ? !!permissions.access_goals : true,
+      accessGoalPlanner: permissions.access_goal_planner !== undefined ? !!permissions.access_goal_planner : true,
+      accessVisionBoard: permissions.access_vision_board !== undefined ? !!permissions.access_vision_board : true,
+      accessGratitude: permissions.access_gratitude !== undefined ? !!permissions.access_gratitude : true,
+      accessHabits: permissions.access_habits !== undefined ? !!permissions.access_habits : true,
+      accessOverallDashboard: permissions.access_overall_dashboard !== undefined ? !!permissions.access_overall_dashboard : true,
+      accessHabitsDashboard: permissions.access_habits_dashboard !== undefined ? !!permissions.access_habits_dashboard : true,
+      accessMusic: permissions.access_music !== undefined ? !!permissions.access_music : true,
+      accessAdmin: permissions.access_admin !== undefined ? !!permissions.access_admin : user.role === "ADMIN",
+    };
+
+    res.json({ user: userObj });
+  } catch (err) {
+    console.error("Get /me error:", err);
+    res.status(500).json({ error: "internal server error fetching session" });
   }
 });

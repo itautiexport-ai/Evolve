@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { Goal, MasterItem, User, JournalEntry } from './types/goal';
 import type { Habit } from './types/habit';
-import { authApi, goalsApi, habitsApi, mastersApi, setAuthToken, clearAuthToken } from './services/api';
+import { authApi, goalsApi, habitsApi, mastersApi, adminApi, preferencesApi, onSessionExpired, clearAuthToken } from './services/api';
 import { EvolveSidebar } from './components/EvolveSidebar';
 import { EvolveHeader } from './components/EvolveHeader';
 import { EvolveHomePage } from './components/EvolveHomePage';
@@ -25,7 +25,6 @@ import confetti from 'canvas-confetti';
 // const MASTERS_STORAGE = 'evolve_masters_v3';
 // const GOALS_STORAGE = 'evolve_goals_v3';
 const USER_STORAGE = 'evolve_user_v3';
-const USERS_STORAGE = 'evolve_users_v3';
 // const HABITS_STORAGE = 'evolve_habits_v3';
 
 // Daily Streak Calculation helper
@@ -93,6 +92,36 @@ export const App: React.FC = () => {
     return null;
   });
 
+  // Local data import state
+  const [hasLegacyData, setHasLegacyData] = useState(false);
+  const [isImportingLocal, setIsImportingLocal] = useState(false);
+
+  // Authenticate and validate session on initial mount
+  useEffect(() => {
+    authApi.getMe()
+      .then(res => {
+        if (res?.user) {
+          setCurrentUser(res.user);
+        }
+      })
+      .catch(() => {
+        clearAuthToken();
+        localStorage.removeItem(USER_STORAGE);
+        setCurrentUser(null);
+      });
+
+    const unsubscribe = onSessionExpired(() => {
+      setCurrentUser(null);
+      clearAuthToken();
+      localStorage.removeItem(USER_STORAGE);
+      setGoals([]);
+      setHabits([]);
+      setMasters([]);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
   // How are you feeling today popup modal state
   const [isFeelingModalOpen, setIsFeelingModalOpen] = useState(false);
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
@@ -109,32 +138,76 @@ export const App: React.FC = () => {
     }
   }, [currentUser]);
 
-  // Users List (Defaults to Admin ID only, filters out example user USER-002)
-  // NOTE: This is temporary local-only data. The "Manage Users" feature 
-  // will be connected to the backend in a later phase.
-  const [users, setUsers] = useState<User[]>(() => {
-    const saved = localStorage.getItem(USERS_STORAGE);
-    if (saved) {
-      try { 
-        const parsed = JSON.parse(saved);
-        return parsed.filter((u: User) => u.id !== 'USER-002');
-      } catch (e) { console.error(e); }
-    }
-    return [
-      {
-        id: 'CRM0001',
-        name: 'Admin ID',
-        email: 'admin@evolve.local',
-        role: 'ADMIN',
-        joinedDate: new Date().toISOString().split('T')[0],
-      }
-    ];
-  });
+  // Users List (loaded from adminApi for administrators)
+  const [users, setUsers] = useState<User[]>([]);
 
-  // Sync Users to LocalStorage
   useEffect(() => {
-    localStorage.setItem(USERS_STORAGE, JSON.stringify(users));
-  }, [users]);
+    if (currentUser?.role === 'ADMIN') {
+      adminApi.getUsers()
+        .then(res => {
+          if (Array.isArray(res)) setUsers(res);
+        })
+        .catch(err => console.warn("Failed to load users for admin:", err));
+    }
+  }, [currentUser]);
+
+  // Check for legacy local data
+  useEffect(() => {
+    if (!currentUser) return;
+    const localGoals = localStorage.getItem('evolve_goals_v3');
+    const localHabits = localStorage.getItem('evolve_habits_v3');
+    const localMasters = localStorage.getItem('evolve_masters_v3');
+    if (localGoals || localHabits || localMasters) {
+      setHasLegacyData(true);
+    }
+  }, [currentUser]);
+
+  const handleImportAllLegacyData = async () => {
+    setIsImportingLocal(true);
+    try {
+      const localGoals = localStorage.getItem('evolve_goals_v3');
+      if (localGoals) {
+        const parsed = JSON.parse(localGoals);
+        for (const g of parsed) {
+          await goalsApi.create(g);
+        }
+        localStorage.removeItem('evolve_goals_v3');
+      }
+
+      const localHabits = localStorage.getItem('evolve_habits_v3');
+      if (localHabits) {
+        const parsed = JSON.parse(localHabits);
+        for (const h of parsed) {
+          await habitsApi.create(h);
+        }
+        localStorage.removeItem('evolve_habits_v3');
+      }
+
+      const localMasters = localStorage.getItem('evolve_masters_v3');
+      if (localMasters) {
+        const parsed = JSON.parse(localMasters);
+        for (const m of parsed) {
+          await mastersApi.create(m);
+        }
+        localStorage.removeItem('evolve_masters_v3');
+      }
+
+      const [newGoals, newHabits, newMasters] = await Promise.all([
+        goalsApi.getAll(),
+        habitsApi.getAll(),
+        mastersApi.getAll(),
+      ]);
+      setGoals(newGoals);
+      setHabits(newHabits);
+      setMasters(newMasters);
+      setHasLegacyData(false);
+      confetti({ particleCount: 80, spread: 60 });
+    } catch (err) {
+      console.error("Failed to import legacy data:", err);
+    } finally {
+      setIsImportingLocal(false);
+    }
+  };
 
   // Masters List (loaded from API after login)
   const [masters, setMasters] = useState<MasterItem[]>([]);
@@ -282,13 +355,21 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await authApi.logout();
+    } catch (err) {
+      console.warn("Logout API call error:", err);
+    }
     if (currentUser && currentUser.id) {
       sessionStorage.removeItem(`evolve_feeling_asked_${currentUser.id}`);
     }
     localStorage.removeItem(USER_STORAGE);
     clearAuthToken();
     setCurrentUser(null);
+    setGoals([]);
+    setHabits([]);
+    setMasters([]);
     setActiveNav('home');
   };
 
@@ -310,14 +391,18 @@ export const App: React.FC = () => {
 
     const loadData = async () => {
       try {
-        const [fetchedGoals, fetchedHabits, fetchedMasters] = await Promise.all([
+        const [fetchedGoals, fetchedHabits, fetchedMasters, prefRes] = await Promise.all([
           goalsApi.getAll(),
           habitsApi.getAll(),
           mastersApi.getAll(),
+          preferencesApi.get().catch(() => ({ preferences: {} })),
         ]);
         setGoals(fetchedGoals);
         setHabits(fetchedHabits);
         setMasters(fetchedMasters);
+        if (prefRes?.preferences?.activeNav) {
+          setActiveNav(prefRes.preferences.activeNav);
+        }
       } catch (err) {
         console.error("Failed to load user data:", err);
       }
@@ -325,6 +410,13 @@ export const App: React.FC = () => {
 
     loadData();
   }, [currentUser]);
+
+  // Sync active navigation preference to user preferences
+  useEffect(() => {
+    if (currentUser) {
+      preferencesApi.save({ activeNav }).catch(() => {});
+    }
+  }, [activeNav, currentUser]);
 
   const renderAccessDenied = (moduleName: string) => (
     <div className="glass-card p-12 text-center max-w-md mx-auto mt-12 animate-scale-up">
@@ -360,6 +452,31 @@ export const App: React.FC = () => {
           setActiveNav={setActiveNav}
           onLogout={handleLogout}
         />
+
+        {/* Legacy Local Data Import Prompt Banner */}
+        {hasLegacyData && (
+          <div className="mx-6 mt-4 p-4 rounded-xl flex items-center justify-between border" style={{ background: '#fef3c7', borderColor: '#fde68a', color: '#92400e' }}>
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <span>💾</span>
+              <span>We detected offline data stored in your browser from a previous session. Would you like to migrate it to your cloud account?</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleImportAllLegacyData}
+                disabled={isImportingLocal}
+                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-600 text-white hover:bg-amber-700 transition"
+              >
+                {isImportingLocal ? "Importing..." : "Import to Cloud"}
+              </button>
+              <button
+                onClick={() => setHasLegacyData(false)}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium text-amber-800 hover:bg-amber-200 transition"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* View Switcher */}
         {activeNav === 'overall-dashboard' ? (
@@ -658,7 +775,6 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
     setLoading(true);
     try {
       const result = await authApi.login(email, password);
-      setAuthToken(result.token);
       onLogin(result.user);
     } catch (err: any) {
       setError(err.message || 'Login failed. Check your credentials.');
@@ -672,9 +788,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
     setError('');
     setLoading(true);
     try {
-      await authApi.signup(name, email, password);
-      const result = await authApi.login(email, password);
-      setAuthToken(result.token);
+      const result = await authApi.signup(name, email, password);
       onLogin(result.user);
     } catch (err: any) {
       setError(err.message || 'Signup failed. Please try again.');

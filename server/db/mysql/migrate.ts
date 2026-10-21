@@ -38,7 +38,15 @@ async function runSqlFile(filePath: string) {
     .map((s) => s.trim())
     .filter(Boolean);
   for (const statement of statements) {
-    await pool.query(statement);
+    try {
+      await pool.query(statement);
+    } catch (err: any) {
+      // 1060: ER_DUP_FIELDNAME (column already exists)
+      if (err?.errno === 1060 || err?.code === "ER_DUP_FIELDNAME") {
+        continue;
+      }
+      throw err;
+    }
   }
 }
 
@@ -61,10 +69,17 @@ async function main() {
   }
 
   console.log(appliedCount > 0 ? `Migrations complete (${appliedCount} newly applied).` : "Migrations complete (nothing new to apply).");
-  process.exit(0);
 }
 
-main().catch((err) => {
-  console.error("Migration failed:", err);
-  process.exit(1);
-});
+main()
+  .then(async () => {
+    await pool.end();
+    process.exit(0);
+  })
+  .catch(async (err) => {
+    console.error("Migration failed:", err);
+    try {
+      await pool.end();
+    } catch {}
+    process.exit(1);
+  });

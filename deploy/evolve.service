@@ -1,0 +1,30 @@
+[Unit]
+Description=Evolve API Backend Service
+After=network.target mysql.service
+Wants=mysql.service
+
+[Service]
+Type=simple
+User=evolve
+Group=evolve
+WorkingDirectory=/var/www/evolve
+Environment=NODE_ENV=production
+EnvironmentFile=/var/www/evolve/.env
+ExecStart=/usr/bin/npm run server
+Restart=always
+RestartSec=10
+
+# Standard logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=evolve-backend
+
+# Security & Sandbox Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/www/evolve/uploads
+
+[Install]
+WantedBy=multi-user.target
