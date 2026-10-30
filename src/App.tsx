@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import type { Goal, MasterItem, User, JournalEntry } from './types/goal';
 import type { Habit } from './types/habit';
 import { authApi, goalsApi, habitsApi, mastersApi, adminApi, preferencesApi, onSessionExpired, clearAuthToken } from './services/api';
+import { DEFAULT_ADMIN_USER } from './data/authData';
 import { EvolveSidebar } from './components/EvolveSidebar';
 import { EvolveHeader } from './components/EvolveHeader';
 import { EvolveHomePage } from './components/EvolveHomePage';
@@ -16,10 +17,11 @@ import { ManifestationView } from './components/ManifestationView';
 import { MusicPlayerView } from './components/MusicPlayerView';
 import { MyHabitTrackerView } from './components/MyHabitTrackerView';
 import { AuthModal } from './components/AuthModal';
+import { LoginForm } from './components/LoginForm';
 import { JournalModal } from './components/JournalModal';
 import { HabitsDashboardView } from './components/HabitsDashboardView';
 import { OverallDashboardView } from './components/OverallDashboardView';
-import { ShieldAlert, Mail, Lock, ShieldCheck } from 'lucide-react';
+import { ShieldAlert } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 // const MASTERS_STORAGE = 'evolve_masters_v3';
@@ -138,8 +140,22 @@ export const App: React.FC = () => {
     }
   }, [currentUser]);
 
-  // Users List (loaded from adminApi for administrators)
-  const [users, setUsers] = useState<User[]>([]);
+  // Users List (Defaults to local storage or fallback, and synced via adminApi for administrators)
+  const [users, setUsers] = useState<User[]>(() => {
+    const saved = localStorage.getItem('evolve_users_v3');
+    if (saved) {
+      try { 
+        const parsed = JSON.parse(saved);
+        return parsed.filter((u: User) => u.id !== 'USER-002').map((u: User) => ({
+          ...u,
+          status: u.status || 'approved',
+        }));
+      } catch (e) { console.error(e); }
+    }
+    return [
+      { ...DEFAULT_ADMIN_USER, name: 'Admin ID', id: 'CRM0001', status: 'approved' }
+    ];
+  });
 
   useEffect(() => {
     if (currentUser?.role === 'ADMIN') {
@@ -430,7 +446,16 @@ export const App: React.FC = () => {
 
   if (!currentUser) {
     return (
-      <LoginForm onLogin={(user) => setCurrentUser(user)} />
+      <LoginForm 
+        users={users}
+        onLogin={(user) => {
+          setCurrentUser(user);
+          localStorage.setItem(USER_STORAGE, JSON.stringify(user));
+        }}
+        onRegisterUser={(newUser) => {
+          setUsers(prev => [...prev, newUser]);
+        }}
+      />
     );
   }
 
@@ -597,7 +622,12 @@ export const App: React.FC = () => {
       <AuthModal
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
-        onLogin={(user) => setCurrentUser(user)}
+        currentUser={currentUser}
+        onLogin={(user) => {
+          setCurrentUser(user);
+          localStorage.setItem(USER_STORAGE, JSON.stringify(user));
+        }}
+        users={users}
       />
 
       {/* Reflection Journal Modal */}
@@ -739,201 +769,6 @@ export const App: React.FC = () => {
             )}
           </div>
         </div>
-      )}
-    </div>
-  );
-};
-
-// Full-screen Login Component
-interface LoginFormProps {
-  onLogin: (user: User) => void;
-}
-
-const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
-  const [mode, setMode] = useState<'login' | 'signup'>('login');
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [savedVisionBoard, setSavedVisionBoard] = useState<any>(null);
-
-  useEffect(() => {
-    const saved = localStorage.getItem('evolve_vision_board_v3');
-    if (saved) {
-      try {
-        setSavedVisionBoard(JSON.parse(saved));
-      } catch (e) {
-        console.error("Failed to parse saved vision board:", e);
-      }
-    }
-  }, []);
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
-    try {
-      const result = await authApi.login(email, password);
-      onLogin(result.user);
-    } catch (err: any) {
-      setError(err.message || 'Login failed. Check your credentials.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSignup = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
-    try {
-      const result = await authApi.signup(name, email, password);
-      onLogin(result.user);
-    } catch (err: any) {
-      setError(err.message || 'Signup failed. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const renderLoginFormCard = () => (
-    <div className="login-glass-card">
-      <div className="login-logo-circle">
-        <ShieldCheck size={28} />
-      </div>
-
-      <h2 className="login-title-rainbow">
-        {mode === 'login' ? 'Evolve Login Portal' : 'Create Your Evolve Account'}
-      </h2>
-      <p className="login-subtitle">
-        {mode === 'login'
-          ? 'Please enter your credentials to access your dashboard'
-          : 'Sign up to start tracking your goals and habits'}
-      </p>
-
-      {error && (
-        <div className="login-error-alert">
-          <span>⚠️ {error}</span>
-        </div>
-      )}
-
-      <form onSubmit={mode === 'login' ? handleLogin : handleSignup}>
-        {mode === 'signup' && (
-          <div className="login-form-group">
-            <label className="login-form-label">Full Name</label>
-            <div className="login-input-wrapper">
-              <Mail size={16} className="login-input-icon" />
-              <input
-                type="text"
-                required
-                placeholder="Your name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="login-input-field"
-              />
-            </div>
-          </div>
-        )}
-
-        <div className="login-form-group">
-          <label className="login-form-label">Email Address</label>
-          <div className="login-input-wrapper">
-            <Mail size={16} className="login-input-icon" />
-            <input
-              type="email"
-              required
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="login-input-field"
-            />
-          </div>
-        </div>
-
-        <div className="login-form-group">
-          <label className="login-form-label">Password</label>
-          <div className="login-input-wrapper">
-            <Lock size={16} className="login-input-icon" />
-            <input
-              type="password"
-              required
-              minLength={6}
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="login-input-field"
-            />
-          </div>
-        </div>
-
-        <button type="submit" className="login-submit-btn" disabled={loading}>
-          {loading ? 'Please wait...' : mode === 'login' ? 'Sign In' : 'Create Account'}
-        </button>
-      </form>
-
-      <div className="login-divider-or" style={{ marginTop: '16px', cursor: 'pointer' }}>
-        <span
-          onClick={() => {
-            setMode(mode === 'login' ? 'signup' : 'login');
-            setError('');
-          }}
-        >
-          {mode === 'login'
-            ? "Don't have an account? Sign up"
-            : 'Already have an account? Sign in'}
-        </span>
-      </div>
-    </div>
-  );
-
-  const CATEGORIES_KEYS = [
-    { key: 'spirituality', label: 'Spirituality' },
-    { key: 'finances', label: 'Money & Finances' },
-    { key: 'career', label: 'Career & Work' },
-    { key: 'health', label: 'Health & Fitness' },
-    { key: 'recreation', label: 'Fun & Recreation' },
-    { key: 'environment', label: 'Environment' },
-    { key: 'community', label: 'Community' },
-    { key: 'family', label: 'Family & Friends' },
-    { key: 'love', label: 'Partner & Love' },
-    { key: 'growth', label: 'Personal Growth & Learning' }
-  ];
-
-  const currentYear = new Date().getFullYear();
-
-  return (
-    <div className="login-fullscreen-container">
-      {savedVisionBoard ? (
-        <div className="login-split-container animate-scale-up">
-          {/* Left Pinned Board side */}
-          <div className="login-pinned-board-side">
-            <h2 className="login-pinned-board-title">✨ MY {currentYear} VISION BOARD ✨</h2>
-            <div className="login-pinned-grid" style={{ marginTop: '16px' }}>
-              {CATEGORIES_KEYS.map((cat) => {
-                const data = savedVisionBoard[cat.key];
-                if (!data) return null;
-                return (
-                  <div key={cat.key} className="login-pinned-polaroid">
-                    <img 
-                      src={data.imageUrl} 
-                      alt={cat.label} 
-                      className="login-pinned-polaroid-img" 
-                    />
-                    <div className="login-pinned-polaroid-category">{cat.label}</div>
-                    <div className="login-pinned-polaroid-text">"{data.aspiration}"</div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-          {/* Right Glass Card Login form */}
-          <div className="login-glass-card-side">
-            {renderLoginFormCard()}
-          </div>
-        </div>
-      ) : (
-        renderLoginFormCard()
       )}
     </div>
   );

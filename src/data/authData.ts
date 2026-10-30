@@ -4,7 +4,9 @@ export const DEFAULT_ADMIN_USER: User = {
   id: 'ADMIN-001',
   name: 'System Administrator',
   email: 'admin@liinexus.com',
+  phone: '+1 (555) 019-2834',
   role: 'ADMIN',
+  status: 'approved',
   avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
   joinedDate: '2025-01-01',
 };
@@ -13,7 +15,9 @@ export const DEFAULT_REGULAR_USER: User = {
   id: 'USER-002',
   name: 'Alex Rivera',
   email: 'alex@lifegoals.com',
+  phone: '+1 (555) 345-6789',
   role: 'USER',
+  status: 'approved',
   avatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=200&q=80',
   joinedDate: '2025-02-15',
 };

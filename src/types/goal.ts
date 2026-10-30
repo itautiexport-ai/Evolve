@@ -61,12 +61,15 @@ export interface FilterOptions {
 }
 
 export type UserRole = 'ADMIN' | 'USER';
+export type UserStatus = 'approved' | 'pending' | 'rejected';
 
 export interface User {
   id: string;
   name: string;
   email: string;
+  phone?: string;
   role: UserRole;
+  status?: UserStatus;
   avatar?: string;
   joinedDate: string;
   vibeName?: string;
