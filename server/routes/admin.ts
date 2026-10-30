@@ -25,11 +25,11 @@ async function recordAdminLog(adminId: string, action: string, details: string):
   }
 }
 
-// GET /api/admin/users - list all users with their permissions
+// GET /api/admin/users - list all users with their permissions, phone, and status
 adminRouter.get("/users", async (_req: AuthenticatedRequest, res) => {
   try {
     const [users] = await pool.query<any[]>(
-      `SELECT u.id, u.name, u.email, u.role, u.avatar, u.vibe_name as vibeName, 
+      `SELECT u.id, u.name, u.email, u.phone, u.role, u.status, u.avatar, u.vibe_name as vibeName,
               u.joined_date as joinedDate,
               p.access_masters as accessMasters,
               p.access_goals as accessGoals,
@@ -50,7 +50,9 @@ adminRouter.get("/users", async (_req: AuthenticatedRequest, res) => {
       id: u.id,
       name: u.name,
       email: u.email,
+      phone: u.phone || undefined,
       role: u.role,
+      status: (u.status || "approved") as "approved" | "pending" | "rejected",
       avatar: u.avatar || undefined,
       vibeName: u.vibeName || undefined,
       joinedDate: u.joinedDate,
@@ -73,10 +75,10 @@ adminRouter.get("/users", async (_req: AuthenticatedRequest, res) => {
   }
 });
 
-// POST /api/admin/users - create new user with specified role and permissions
+// POST /api/admin/users - create new user with specified ID, role, status, and permissions
 adminRouter.post("/users", async (req: AuthenticatedRequest, res) => {
   try {
-    const { id: customId, name, email, password, role, vibeName } = req.body;
+    const { id: customId, name, email, phone, password, role, status, vibeName } = req.body;
 
     if (!name || !email || !password) {
       res.status(400).json({ error: "name, email, and password are required" });
@@ -84,21 +86,29 @@ adminRouter.post("/users", async (req: AuthenticatedRequest, res) => {
     }
 
     const cleanEmail = email.trim().toLowerCase();
-    const [existing] = await pool.query<any[]>("SELECT id FROM users WHERE email = ?", [cleanEmail]);
-    if (existing.length > 0) {
+    const [existingEmail] = await pool.query<any[]>("SELECT id FROM users WHERE email = ?", [cleanEmail]);
+    if (existingEmail.length > 0) {
       res.status(409).json({ error: "user with this email already exists" });
       return;
     }
 
     const userId = customId?.trim() ? customId.trim() : crypto.randomUUID();
+    const [existingId] = await pool.query<any[]>("SELECT id FROM users WHERE id = ?", [userId]);
+    if (existingId.length > 0) {
+      res.status(409).json({ error: `User ID "${userId}" already exists` });
+      return;
+    }
+
     const passwordHash = await bcrypt.hash(password, 10);
     const userRole = role === "ADMIN" ? "ADMIN" : "USER";
+    const userStatus = status === "pending" ? "pending" : status === "rejected" ? "rejected" : "approved";
+    const cleanPhone = typeof phone === "string" && phone.trim() ? phone.trim() : null;
     const joinedDate = new Date().toISOString().split("T")[0];
 
     await pool.query(
-      `INSERT INTO users (id, name, email, password_hash, role, vibe_name, joined_date)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [userId, name.trim(), cleanEmail, passwordHash, userRole, vibeName?.trim() || null, joinedDate]
+      `INSERT INTO users (id, name, email, phone, password_hash, role, status, vibe_name, joined_date)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [userId, name.trim(), cleanEmail, cleanPhone, passwordHash, userRole, userStatus, vibeName?.trim() || null, joinedDate]
     );
 
     // Create permissions
@@ -109,13 +119,15 @@ adminRouter.post("/users", async (req: AuthenticatedRequest, res) => {
       [userId, userRole === "ADMIN" ? 1 : 0]
     );
 
-    await recordAdminLog(req.userId!, "USER_CREATED", `Created user ${name} (${cleanEmail}) with role ${userRole}`);
+    await recordAdminLog(req.userId!, "USER_CREATED", `Created user ${name} (${cleanEmail}) with role ${userRole} and status ${userStatus}`);
 
     res.status(201).json({
       id: userId,
       name: name.trim(),
       email: cleanEmail,
+      phone: cleanPhone || undefined,
       role: userRole,
+      status: userStatus,
       vibeName: vibeName?.trim() || undefined,
       joinedDate,
     });
@@ -125,11 +137,55 @@ adminRouter.post("/users", async (req: AuthenticatedRequest, res) => {
   }
 });
 
+// PATCH /api/admin/users/:id/status - approve or reject a user account
+adminRouter.patch("/users/:id/status", async (req: AuthenticatedRequest, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (!status || !["approved", "pending", "rejected"].includes(status)) {
+      res.status(400).json({ error: "valid status ('approved', 'pending', 'rejected') is required" });
+      return;
+    }
+
+    const [existing] = await pool.query<any[]>("SELECT id, role, email, name FROM users WHERE id = ?", [id]);
+    if (existing.length === 0) {
+      res.status(404).json({ error: "user not found" });
+      return;
+    }
+
+    // Prevent rejecting or setting pending on the last admin
+    if (existing[0].role === "ADMIN" && status !== "approved") {
+      const [adminCountRows] = await pool.query<any[]>(
+        "SELECT COUNT(*) as count FROM users WHERE role = 'ADMIN' AND status = 'approved'"
+      );
+      if (adminCountRows[0].count <= 1) {
+        res.status(400).json({ error: "cannot change status of the only remaining active administrator" });
+        return;
+      }
+    }
+
+    await pool.query("UPDATE users SET status = ? WHERE id = ?", [status, id]);
+
+    if (status !== "approved") {
+      // Invalidate all active sessions for non-approved user
+      await pool.query("DELETE FROM sessions WHERE user_id = ?", [id]);
+    }
+
+    await recordAdminLog(req.userId!, "USER_STATUS_UPDATED", `Updated status for user ${existing[0].name} (${id}) to ${status}`);
+
+    res.json({ id, status, message: `User status updated to ${status}` });
+  } catch (err) {
+    console.error("Admin update status error:", err);
+    res.status(500).json({ error: "failed to update user status" });
+  }
+});
+
 // PUT /api/admin/users/:id - update user
 adminRouter.put("/users/:id", async (req: AuthenticatedRequest, res) => {
   try {
     const { id } = req.params;
-    const { name, vibeName, role, password } = req.body;
+    const { name, email, phone, vibeName, role, status, password } = req.body;
 
     const [existing] = await pool.query<any[]>("SELECT * FROM users WHERE id = ?", [id]);
     if (existing.length === 0) {
@@ -151,20 +207,28 @@ adminRouter.put("/users/:id", async (req: AuthenticatedRequest, res) => {
     }
 
     const newRole = role === "ADMIN" ? "ADMIN" : role === "USER" ? "USER" : targetUser.role;
+    const newStatus = ["approved", "pending", "rejected"].includes(status) ? status : targetUser.status || "approved";
+    const newEmail = email && typeof email === "string" ? email.trim().toLowerCase() : targetUser.email;
+    const newPhone = phone !== undefined ? (typeof phone === "string" && phone.trim() ? phone.trim() : null) : targetUser.phone;
 
     if (password && typeof password === "string" && password.trim().length >= 6) {
       const passwordHash = await bcrypt.hash(password.trim(), 10);
       await pool.query(
-        "UPDATE users SET name = ?, vibe_name = ?, role = ?, password_hash = ? WHERE id = ?",
-        [name ?? targetUser.name, vibeName ?? targetUser.vibe_name, newRole, passwordHash, id]
+        "UPDATE users SET name = ?, email = ?, phone = ?, vibe_name = ?, role = ?, status = ?, password_hash = ? WHERE id = ?",
+        [name ?? targetUser.name, newEmail, newPhone, vibeName ?? targetUser.vibe_name, newRole, newStatus, passwordHash, id]
       );
       // Invalidate all active sessions for this user on password reset
       await pool.query("DELETE FROM sessions WHERE user_id = ?", [id]);
     } else {
       await pool.query(
-        "UPDATE users SET name = ?, vibe_name = ?, role = ? WHERE id = ?",
-        [name ?? targetUser.name, vibeName ?? targetUser.vibe_name, newRole, id]
+        "UPDATE users SET name = ?, email = ?, phone = ?, vibe_name = ?, role = ?, status = ? WHERE id = ?",
+        [name ?? targetUser.name, newEmail, newPhone, vibeName ?? targetUser.vibe_name, newRole, newStatus, id]
       );
+    }
+
+    if (newStatus !== "approved") {
+      // Invalidate active sessions if user is not approved
+      await pool.query("DELETE FROM sessions WHERE user_id = ?", [id]);
     }
 
     // Keep access_admin in sync with role if role changed
@@ -176,13 +240,15 @@ adminRouter.put("/users/:id", async (req: AuthenticatedRequest, res) => {
       );
     }
 
-    await recordAdminLog(req.userId!, "USER_UPDATED", `Updated user ${id} (Role: ${newRole})`);
+    await recordAdminLog(req.userId!, "USER_UPDATED", `Updated user ${id} (Role: ${newRole}, Status: ${newStatus})`);
 
     res.json({
       id,
       name: name ?? targetUser.name,
-      email: targetUser.email,
+      email: newEmail,
+      phone: newPhone || undefined,
       role: newRole,
+      status: newStatus,
       vibeName: vibeName ?? targetUser.vibe_name,
     });
   } catch (err) {

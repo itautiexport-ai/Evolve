@@ -23,9 +23,10 @@ function isValidEmail(email: string): boolean {
 }
 
 // POST /api/auth/signup
+// Self-signup: creates an account with status 'pending' without granting an authenticated session
 authRouter.post("/signup", protectAuthCrossOrigin, async (req, res) => {
   try {
-    const { name, email, password, vibeName } = req.body;
+    const { name, email, password, phone, vibeName } = req.body;
 
     if (!name || typeof name !== "string" || !name.trim()) {
       res.status(400).json({ error: "full name is required" });
@@ -42,6 +43,7 @@ authRouter.post("/signup", protectAuthCrossOrigin, async (req, res) => {
 
     const cleanEmail = email.trim().toLowerCase();
     const cleanName = name.trim();
+    const cleanPhone = typeof phone === "string" && phone.trim() ? phone.trim() : null;
     const cleanVibe = typeof vibeName === "string" ? vibeName.trim() : null;
 
     // Check duplicate email
@@ -58,11 +60,11 @@ authRouter.post("/signup", protectAuthCrossOrigin, async (req, res) => {
     const passwordHash = await bcrypt.hash(password, 10);
     const joinedDate = new Date().toISOString().split("T")[0];
 
-    // Enforce role = 'USER' to prevent unauthorized role escalation
+    // Enforce role = 'USER' and status = 'pending' for self-signup
     await pool.query(
-      `INSERT INTO users (id, name, email, password_hash, role, vibe_name, joined_date)
-       VALUES (?, ?, ?, ?, 'USER', ?, ?)`,
-      [id, cleanName, cleanEmail, passwordHash, cleanVibe, joinedDate]
+      `INSERT INTO users (id, name, email, phone, password_hash, role, status, vibe_name, joined_date)
+       VALUES (?, ?, ?, ?, ?, 'USER', 'pending', ?, ?)`,
+      [id, cleanName, cleanEmail, cleanPhone, passwordHash, cleanVibe, joinedDate]
     );
 
     // Create default permissions
@@ -77,42 +79,20 @@ authRouter.post("/signup", protectAuthCrossOrigin, async (req, res) => {
       console.warn("Could not insert default permissions:", permErr);
     }
 
-    // Create revocable session record
-    const sessionId = crypto.randomUUID();
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-    try {
-      await pool.query(
-        "INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)",
-        [sessionId, id, expiresAt]
-      );
-    } catch (sessErr) {
-      console.warn("Could not insert session row:", sessErr);
-    }
-
-    const token = generateToken({ sessionId, userId: id, role: "USER" });
-    const csrfToken = setAuthCookies(res, token);
-
+    // Do NOT generate session or set cookies for pending self-signup!
     const userObj = {
       id,
       name: cleanName,
       email: cleanEmail,
+      phone: cleanPhone || undefined,
       role: "USER" as const,
+      status: "pending" as const,
       vibeName: cleanVibe || undefined,
       joinedDate,
-      accessMasters: true,
-      accessGoals: true,
-      accessGoalPlanner: true,
-      accessVisionBoard: true,
-      accessGratitude: true,
-      accessHabits: true,
-      accessOverallDashboard: true,
-      accessHabitsDashboard: true,
-      accessMusic: true,
-      accessAdmin: false,
     };
 
     res.status(201).json({
-      csrfToken,
+      message: "Registration submitted successfully. Your account is pending administrator approval.",
       user: userObj,
     });
   } catch (err) {
@@ -121,19 +101,53 @@ authRouter.post("/signup", protectAuthCrossOrigin, async (req, res) => {
   }
 });
 
-// POST /api/auth/login
-authRouter.post("/login", protectAuthCrossOrigin, async (req, res) => {
+// GET /api/auth/status
+// Check public approval status for a user by email or user ID
+authRouter.get("/status", async (req, res) => {
   try {
-    const { email, password } = req.body;
-
-    if (!email || typeof email !== "string" || !password || typeof password !== "string") {
-      res.status(400).json({ error: "email and password are required" });
+    const identifier = (req.query.identifier || req.query.email || req.query.id || "").toString().trim();
+    if (!identifier) {
+      res.status(400).json({ error: "identifier is required" });
       return;
     }
 
-    const cleanEmail = email.trim().toLowerCase();
-    const rateLimitKey = `${req.ip || "unknown"}_${cleanEmail}`;
+    const [rows] = await pool.query<any[]>(
+      "SELECT id, name, email, phone, status FROM users WHERE email = ? OR id = ?",
+      [identifier.toLowerCase(), identifier]
+    );
 
+    if (rows.length === 0) {
+      res.status(404).json({ error: "user not found" });
+      return;
+    }
+
+    const u = rows[0];
+    res.json({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      phone: u.phone || undefined,
+      status: u.status || "approved",
+    });
+  } catch (err) {
+    console.error("Status check error:", err);
+    res.status(500).json({ error: "failed to check status" });
+  }
+});
+
+// POST /api/auth/login
+// Supports login with either User ID or email + password, enforcing approved status
+authRouter.post("/login", protectAuthCrossOrigin, async (req, res) => {
+  try {
+    const identifier = (req.body.identifier || req.body.email || req.body.userId || "").trim();
+    const { password } = req.body;
+
+    if (!identifier || !password || typeof password !== "string") {
+      res.status(400).json({ error: "identifier and password are required" });
+      return;
+    }
+
+    const rateLimitKey = `${req.ip || "unknown"}_${identifier.toLowerCase()}`;
     const rateCheck = checkLoginRateLimit(rateLimitKey);
     if (!rateCheck.allowed) {
       res.status(429).json({
@@ -142,15 +156,16 @@ authRouter.post("/login", protectAuthCrossOrigin, async (req, res) => {
       return;
     }
 
+    // Support verification by email OR User ID
     const [rows] = await pool.query<any[]>(
-      `SELECT id, name, email, password_hash, role, avatar, vibe_name, joined_date 
-       FROM users WHERE email = ?`,
-      [cleanEmail]
+      `SELECT id, name, email, phone, password_hash, role, status, avatar, vibe_name, joined_date
+       FROM users WHERE email = ? OR id = ?`,
+      [identifier.toLowerCase(), identifier]
     );
 
     if (rows.length === 0) {
       recordFailedLogin(rateLimitKey);
-      res.status(401).json({ error: "invalid email or password" });
+      res.status(401).json({ error: "invalid identifier or password" });
       return;
     }
 
@@ -159,11 +174,38 @@ authRouter.post("/login", protectAuthCrossOrigin, async (req, res) => {
 
     if (!passwordMatches) {
       recordFailedLogin(rateLimitKey);
-      res.status(401).json({ error: "invalid email or password" });
+      res.status(401).json({ error: "invalid identifier or password" });
       return;
     }
 
     clearLoginRateLimit(rateLimitKey);
+
+    // Enforce approval status check
+    const userStatus = user.status || "approved";
+    if (userStatus === "pending") {
+      res.status(403).json({
+        error: "Your account is pending administrator approval. Please wait until your account is approved before logging in.",
+        code: "PENDING_APPROVAL",
+        status: "pending",
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          phone: user.phone || undefined,
+          status: "pending",
+        },
+      });
+      return;
+    }
+
+    if (userStatus === "rejected") {
+      res.status(403).json({
+        error: "Your registration request was rejected by an administrator.",
+        code: "ACCOUNT_REJECTED",
+        status: "rejected",
+      });
+      return;
+    }
 
     // Fetch permissions
     let permissions: any = {};
@@ -198,7 +240,9 @@ authRouter.post("/login", protectAuthCrossOrigin, async (req, res) => {
       id: user.id,
       name: user.name,
       email: user.email,
+      phone: user.phone || undefined,
       role: user.role,
+      status: "approved" as const,
       avatar: user.avatar || undefined,
       vibeName: user.vibe_name || undefined,
       joinedDate: user.joined_date,
@@ -289,7 +333,7 @@ authRouter.post("/change-password", requireAuth, async (req: AuthenticatedReques
 authRouter.get("/me", requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const [rows] = await pool.query<any[]>(
-      `SELECT id, name, email, role, avatar, vibe_name, joined_date 
+      `SELECT id, name, email, phone, role, status, avatar, vibe_name, joined_date
        FROM users WHERE id = ?`,
       [req.userId]
     );
@@ -320,7 +364,9 @@ authRouter.get("/me", requireAuth, async (req: AuthenticatedRequest, res) => {
       id: user.id,
       name: user.name,
       email: user.email,
+      phone: user.phone || undefined,
       role: user.role,
+      status: (user.status || "approved") as "approved" | "pending" | "rejected",
       avatar: user.avatar || undefined,
       vibeName: user.vibe_name || undefined,
       joinedDate: user.joined_date,

@@ -73,7 +73,6 @@ export interface User {
   avatar?: string;
   joinedDate: string;
   vibeName?: string;
-  password?: string;
   accessMasters?: boolean;
   accessGoals?: boolean;
   accessAdmin?: boolean;

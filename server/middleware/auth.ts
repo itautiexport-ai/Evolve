@@ -83,7 +83,7 @@ export async function requireAuth(req: AuthenticatedRequest, res: Response, next
   // Validate active session and fresh user state from MySQL on EVERY request
   try {
     const [rows] = await pool.query<any[]>(
-      `SELECT u.id, u.role, s.id as session_id
+      `SELECT u.id, u.role, u.status, s.id as session_id
        FROM sessions s
        JOIN users u ON s.user_id = u.id
        WHERE s.id = ? AND s.user_id = ? AND s.expires_at > NOW()`,
@@ -97,6 +97,12 @@ export async function requireAuth(req: AuthenticatedRequest, res: Response, next
     }
 
     const userRow = rows[0];
+    if (userRow.status && userRow.status !== "approved") {
+      clearAuthCookies(res);
+      res.status(403).json({ error: "account is not approved", code: "ACCOUNT_NOT_APPROVED" });
+      return;
+    }
+
     req.userId = userRow.id;
     req.userRole = userRow.role; // Freshly checked from MySQL
     req.sessionId = userRow.session_id;

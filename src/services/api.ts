@@ -55,12 +55,20 @@ async function apiRequest(endpoint: string, options: RequestInit = {}) {
     // Session expired or invalid
     notifySessionExpired();
     const error = await response.json().catch(() => ({ error: "Unauthorized" }));
-    throw new Error(error.error || "Session expired. Please log in again.");
+    const err: any = new Error(error.error || "Session expired. Please log in again.");
+    err.status = 401;
+    err.code = error.code;
+    err.data = error;
+    throw err;
   }
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: "Unknown error" }));
-    throw new Error(error.error || `Request failed with status ${response.status}`);
+    const err: any = new Error(error.error || `Request failed with status ${response.status}`);
+    err.status = response.status;
+    err.code = error.code;
+    err.data = error;
+    throw err;
   }
 
   if (response.status === 204) {
@@ -72,17 +80,33 @@ async function apiRequest(endpoint: string, options: RequestInit = {}) {
 
 // ---------- Auth ----------
 export const authApi = {
-  signup: (name: string, email: string, password: string, vibeName?: string) =>
-    apiRequest("/auth/signup", {
+  signup: (
+    dataOrName: { name: string; email: string; password: string; phone?: string; vibeName?: string } | string,
+    email?: string,
+    password?: string,
+    phone?: string,
+    vibeName?: string
+  ) => {
+    let payload: any;
+    if (typeof dataOrName === "object" && dataOrName !== null) {
+      payload = dataOrName;
+    } else {
+      payload = { name: dataOrName, email, password, phone, vibeName };
+    }
+    return apiRequest("/auth/signup", {
       method: "POST",
-      body: JSON.stringify({ name, email, password, vibeName }),
-    }),
+      body: JSON.stringify(payload),
+    });
+  },
 
-  login: (email: string, password: string) =>
+  login: (identifier: string, password: string) =>
     apiRequest("/auth/login", {
       method: "POST",
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ identifier, email: identifier, password }),
     }),
+
+  checkStatus: (identifier: string) =>
+    apiRequest(`/auth/status?identifier=${encodeURIComponent(identifier)}`),
 
   logout: () =>
     apiRequest("/auth/logout", {
@@ -185,6 +209,8 @@ export const adminApi = {
   createUser: (userData: any) => apiRequest("/admin/users", { method: "POST", body: JSON.stringify(userData) }),
   updateUser: (id: string, userData: any) =>
     apiRequest(`/admin/users/${id}`, { method: "PUT", body: JSON.stringify(userData) }),
+  updateUserStatus: (id: string, status: "approved" | "pending" | "rejected") =>
+    apiRequest(`/admin/users/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) }),
   deleteUser: (id: string) => apiRequest(`/admin/users/${id}`, { method: "DELETE" }),
   updatePermissions: (userId: string, permissions: any) =>
     apiRequest(`/admin/permissions/${userId}`, { method: "PUT", body: JSON.stringify(permissions) }),

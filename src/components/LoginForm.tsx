@@ -1,14 +1,12 @@
 import React, { useState } from 'react';
 import type { User } from '../types/goal';
-import { DEFAULT_ADMIN_USER, DEFAULT_REGULAR_USER } from '../data/authData';
+import { authApi } from '../services/api';
 import { 
   ShieldCheck, 
   Mail, 
   Lock, 
   User as UserIcon, 
   Phone, 
-  Key, 
-  Zap, 
   Clock, 
   CheckCircle2, 
   AlertCircle, 
@@ -22,13 +20,12 @@ import confetti from 'canvas-confetti';
 
 interface LoginFormProps {
   onLogin: (user: User) => void;
-  users: User[];
-  onRegisterUser: (newUser: User) => void;
+  users?: User[];
+  onRegisterUser?: (newUser: User) => void;
 }
 
 export const LoginForm: React.FC<LoginFormProps> = ({
   onLogin,
-  users,
   onRegisterUser,
 }) => {
   const [activeTab, setActiveTab] = useState<'signin' | 'signup'>('signin');
@@ -39,6 +36,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
   const [showPassword, setShowPassword] = useState(false);
   const [signInError, setSignInError] = useState('');
   const [pendingUserAttempt, setPendingUserAttempt] = useState<User | null>(null);
+  const [isSigningIn, setIsSigningIn] = useState(false);
 
   // Sign Up Form State
   const [signUpFullName, setSignUpFullName] = useState('');
@@ -48,72 +46,60 @@ export const LoginForm: React.FC<LoginFormProps> = ({
   const [signUpConfirmPassword, setSignUpConfirmPassword] = useState('');
   const [showSignUpPassword, setShowSignUpPassword] = useState(false);
   const [signUpError, setSignUpError] = useState('');
+  const [isSigningUp, setIsSigningUp] = useState(false);
 
   // Waiting / Pending Confirmation Screen State
   const [pendingConfirmationUser, setPendingConfirmationUser] = useState<User | null>(null);
   const [checkingStatus, setCheckingStatus] = useState(false);
   const [statusCheckMsg, setStatusCheckMsg] = useState<{ type: 'pending' | 'approved'; text: string } | null>(null);
 
-  // Handle Manual Sign In
-  const handleSignIn = (e: React.FormEvent) => {
+  // Handle Authenticated Sign In via Backend
+  const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setSignInError('');
     setPendingUserAttempt(null);
 
-    const cleanEmail = email.trim().toLowerCase();
+    const cleanIdentifier = email.trim();
     const cleanPassword = password.trim();
 
-    // 1. Look up user in registered users list
-    const foundUser = users.find(u => 
-      u.email.trim().toLowerCase() === cleanEmail || 
-      u.id.toLowerCase() === cleanEmail
-    );
+    if (!cleanIdentifier || !cleanPassword) {
+      setSignInError('Please enter both your User ID / Email and password.');
+      return;
+    }
 
-    if (foundUser) {
-      if (foundUser.password && foundUser.password !== cleanPassword) {
-        setSignInError('Incorrect password. Please verify your credentials.');
-        return;
+    setIsSigningIn(true);
+    try {
+      const res = await authApi.login(cleanIdentifier, cleanPassword);
+      if (res?.user) {
+        onLogin(res.user);
+      } else {
+        throw new Error('Authentication succeeded but user record was not returned.');
       }
-
-      // Check Approval Status
-      if (foundUser.status === 'pending') {
-        setPendingUserAttempt(foundUser);
+    } catch (err: any) {
+      if (err.code === 'PENDING_APPROVAL' || (err.status === 403 && String(err.message).toLowerCase().includes('pending'))) {
+        const pendingUser: User = err.data?.user || {
+          id: cleanIdentifier,
+          name: cleanIdentifier,
+          email: cleanIdentifier,
+          phone: '',
+          role: 'USER',
+          status: 'pending',
+          joinedDate: new Date().toISOString().split('T')[0],
+        };
+        setPendingUserAttempt(pendingUser);
         setSignInError('PENDING_APPROVAL');
-        return;
+      } else if (err.code === 'ACCOUNT_REJECTED' || (err.status === 403 && String(err.message).toLowerCase().includes('reject'))) {
+        setSignInError('Your registration request was rejected by an administrator. Please contact support.');
+      } else {
+        setSignInError(err.message || 'Invalid User ID / email or password. Please verify your credentials.');
       }
-
-      if (foundUser.status === 'rejected') {
-        setSignInError('Your registration request was not approved by the administrator. Please contact support.');
-        return;
-      }
-
-      // Approved!
-      onLogin(foundUser);
-      return;
+    } finally {
+      setIsSigningIn(false);
     }
-
-    // 2. Check Demo Credentials fallback
-    const isAdminEmail = cleanEmail === 'admin@liinexus.com' || cleanEmail === 'admin';
-    const isAdminPassword = cleanPassword === 'admin123' || cleanPassword === 'admin';
-
-    const isUserEmail = cleanEmail === 'alex@lifegoals.com' || cleanEmail === 'user';
-    const isUserPassword = cleanPassword === 'user123' || cleanPassword === 'user';
-
-    if (isAdminEmail && isAdminPassword) {
-      onLogin(DEFAULT_ADMIN_USER);
-      return;
-    }
-
-    if (isUserEmail && isUserPassword) {
-      onLogin(DEFAULT_REGULAR_USER);
-      return;
-    }
-
-    setSignInError('Invalid email or password. Please check your credentials or register a new account.');
   };
 
-  // Handle Sign Up Submission
-  const handleSignUp = (e: React.FormEvent) => {
+  // Handle Authenticated Sign Up via Backend
+  const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setSignUpError('');
 
@@ -145,79 +131,47 @@ export const LoginForm: React.FC<LoginFormProps> = ({
       return;
     }
 
-    // Check if email already registered
-    const existing = users.find(u => u.email.trim().toLowerCase() === cleanEmail);
-    if (existing) {
-      if (existing.status === 'pending') {
-        setPendingConfirmationUser(existing);
-        return;
+    setIsSigningUp(true);
+    try {
+      const res = await authApi.signup({
+        name: signUpFullName.trim(),
+        email: cleanEmail,
+        phone: signUpPhone.trim(),
+        password: signUpPassword,
+      });
+
+      if (res?.user) {
+        setPendingConfirmationUser(res.user);
+        if (onRegisterUser) {
+          onRegisterUser(res.user);
+        }
+        // Reset form fields
+        setSignUpFullName('');
+        setSignUpEmail('');
+        setSignUpPhone('');
+        setSignUpPassword('');
+        setSignUpConfirmPassword('');
+      } else {
+        throw new Error('Registration could not be completed. Please try again.');
       }
-      setSignUpError('An account with this email address already exists. Please Sign In.');
-      return;
+    } catch (err: any) {
+      setSignUpError(err.message || 'Registration failed. Please check your information and try again.');
+    } finally {
+      setIsSigningUp(false);
     }
-
-    // Generate unique User ID
-    const newUserId = 'EVO-' + Math.floor(1000 + Math.random() * 9000);
-
-    const newUser: User = {
-      id: newUserId,
-      name: signUpFullName.trim(),
-      email: cleanEmail,
-      phone: signUpPhone.trim(),
-      password: signUpPassword,
-      role: 'USER',
-      status: 'pending', // Starts in pending approval state!
-      vibeName: signUpFullName.trim().split(' ')[0],
-      joinedDate: new Date().toISOString().split('T')[0],
-      avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(signUpFullName.trim())}`,
-      accessMasters: true,
-      accessGoals: true,
-      accessHabits: true,
-      accessGratitude: true,
-      accessMusic: true,
-      accessOverallDashboard: true,
-      accessHabitsDashboard: true,
-      accessGoalPlanner: true,
-      accessVisionBoard: true,
-      accessAdmin: false,
-    };
-
-    onRegisterUser(newUser);
-
-    // Switch to Pending Confirmation View
-    setPendingConfirmationUser(newUser);
-
-    // Reset form fields
-    setSignUpFullName('');
-    setSignUpEmail('');
-    setSignUpPhone('');
-    setSignUpPassword('');
-    setSignUpConfirmPassword('');
   };
 
-  // Check live approval status from users list / storage
-  const handleCheckApprovalStatus = (targetUser: User) => {
+  // Check live approval status directly from authenticated backend
+  const handleCheckApprovalStatus = async (targetUser: User) => {
     setCheckingStatus(true);
     setStatusCheckMsg(null);
 
-    setTimeout(() => {
-      // Re-read latest users
-      let latestUsers = users;
-      try {
-        const stored = localStorage.getItem('evolve_users_v3');
-        if (stored) {
-          latestUsers = JSON.parse(stored);
-        }
-      } catch (err) {
-        console.error(err);
-      }
-
-      const freshUser = latestUsers.find(u => u.id === targetUser.id || u.email.toLowerCase() === targetUser.email.toLowerCase());
-
-      if (freshUser && freshUser.status === 'approved') {
+    try {
+      const res = await authApi.checkStatus(targetUser.id || targetUser.email);
+      if (res?.status === 'approved') {
         setStatusCheckMsg({
           type: 'approved',
-          text: '🎉 Congratulations! Your account has been approved by the Admin! Logging you in...',
+          text: '🎉 Congratulations! Your account has been approved by the Admin! You can now sign in with your password.',
         });
         confetti({
           particleCount: 100,
@@ -225,16 +179,31 @@ export const LoginForm: React.FC<LoginFormProps> = ({
           origin: { y: 0.6 }
         });
         setTimeout(() => {
-          onLogin(freshUser);
-        }, 1500);
+          setPendingConfirmationUser(null);
+          setPendingUserAttempt(null);
+          setSignInError('');
+          setActiveTab('signin');
+          setEmail(targetUser.email || targetUser.id);
+        }, 1800);
+      } else if (res?.status === 'rejected') {
+        setStatusCheckMsg({
+          type: 'pending',
+          text: '❌ Your registration request was rejected by an administrator. Please contact support.',
+        });
       } else {
         setStatusCheckMsg({
           type: 'pending',
           text: '⏳ Still pending administrator approval. Please wait for an admin to review your account.',
         });
       }
+    } catch (err: any) {
+      setStatusCheckMsg({
+        type: 'pending',
+        text: err.message || 'Unable to check approval status. Please try again in a few moments.',
+      });
+    } finally {
       setCheckingStatus(false);
-    }, 600);
+    }
   };
 
   // ==========================================
@@ -282,7 +251,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
           <div className="pending-instruction-alert">
             <ShieldCheck size={18} className="text-amber-600 flex-shrink-0" />
             <p className="text-xs text-amber-900 text-left leading-relaxed">
-              <strong>Admin Approval Required:</strong> For platform security, new accounts must be approved by the administrator before you can log in. Once approved, you can sign in with your email and password.
+              <strong>Admin Approval Required:</strong> For platform security, new accounts must be approved by the administrator before you can log in. Once approved, you can sign in with your email or User ID and password.
             </p>
           </div>
 
@@ -368,56 +337,6 @@ export const LoginForm: React.FC<LoginFormProps> = ({
         {/* ======================================================= */}
         {activeTab === 'signin' && (
           <div className="animate-fade-in">
-            {/* Demo Quick Credentials Card */}
-            <div className="login-cred-box">
-              <div className="login-cred-title">
-                <Key size={14} /> Quick Demo Access
-              </div>
-              <div className="login-cred-line">
-                Admin: <code>admin@liinexus.com</code> / <code>admin123</code>
-              </div>
-              <div className="login-cred-line">
-                User: <code>alex@lifegoals.com</code> / <code>user123</code>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
-              <button 
-                type="button" 
-                className="login-instant-btn"
-                style={{ margin: 0, fontSize: '0.8rem', padding: '10px 8px' }}
-                onClick={() => {
-                  setEmail('admin@liinexus.com');
-                  setPassword('admin123');
-                  setSignInError('');
-                  setPendingUserAttempt(null);
-                }}
-              >
-                <Zap size={14} /> Auto-fill Admin
-              </button>
-              <button 
-                type="button" 
-                className="login-instant-btn"
-                style={{ 
-                  margin: 0, 
-                  fontSize: '0.8rem', 
-                  padding: '10px 8px', 
-                  background: 'linear-gradient(135deg, #7c3aed, #8b5cf6)', 
-                  boxShadow: '0 4px 12px rgba(124, 58, 237, 0.25)' 
-                }}
-                onClick={() => {
-                  setEmail('alex@lifegoals.com');
-                  setPassword('user123');
-                  setSignInError('');
-                  setPendingUserAttempt(null);
-                }}
-              >
-                <Zap size={14} /> Auto-fill User
-              </button>
-            </div>
-
-            <div className="login-divider-or">Or Sign In with Email</div>
-
             {/* Error or Pending Alert */}
             {signInError === 'PENDING_APPROVAL' && pendingUserAttempt ? (
               <div className="login-pending-alert animate-shake">
@@ -426,15 +345,16 @@ export const LoginForm: React.FC<LoginFormProps> = ({
                   <span>Account Pending Admin Approval</span>
                 </div>
                 <p className="text-xs text-amber-900 leading-relaxed mb-3">
-                  Your account for <strong>{pendingUserAttempt.email}</strong> is awaiting approval by an administrator. You will be able to log in as soon as your account is approved.
+                  Your account for <strong>{pendingUserAttempt.email || pendingUserAttempt.id}</strong> is awaiting approval by an administrator. You will be able to log in as soon as your account is approved.
                 </p>
                 <button
                   type="button"
                   onClick={() => handleCheckApprovalStatus(pendingUserAttempt)}
+                  disabled={checkingStatus}
                   className="btn btn-xs bg-amber-500 hover:bg-amber-600 text-white font-bold py-1.5 px-3 rounded-lg flex items-center justify-center gap-1.5 w-full"
                 >
                   <RefreshCw size={13} className={checkingStatus ? 'animate-spin' : ''} />
-                  <span>Check If Admin Approved</span>
+                  <span>{checkingStatus ? 'Checking Status...' : 'Check If Admin Approved'}</span>
                 </button>
               </div>
             ) : signInError ? (
@@ -452,10 +372,11 @@ export const LoginForm: React.FC<LoginFormProps> = ({
                   <input
                     type="text"
                     required
-                    placeholder="name@company.com"
+                    placeholder="Enter email or User ID"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="login-input-field"
+                    autoComplete="username"
                   />
                 </div>
               </div>
@@ -472,6 +393,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
                     onChange={(e) => setPassword(e.target.value)}
                     className="login-input-field"
                     style={{ paddingRight: '40px' }}
+                    autoComplete="current-password"
                   />
                   <button
                     type="button"
@@ -484,8 +406,8 @@ export const LoginForm: React.FC<LoginFormProps> = ({
                 </div>
               </div>
 
-              <button type="submit" className="login-submit-btn">
-                <span>Sign In to Evolve</span>
+              <button type="submit" className="login-submit-btn" disabled={isSigningIn}>
+                <span>{isSigningIn ? 'Signing In...' : 'Sign In to Evolve'}</span>
                 <ArrowRight size={16} />
               </button>
             </form>
@@ -615,9 +537,9 @@ export const LoginForm: React.FC<LoginFormProps> = ({
                 </div>
               </div>
 
-              <button type="submit" className="login-submit-btn signup-btn">
+              <button type="submit" className="login-submit-btn signup-btn" disabled={isSigningUp}>
                 <ShieldCheck size={18} />
-                <span>Create Account & Request Approval</span>
+                <span>{isSigningUp ? 'Submitting Registration...' : 'Create Account & Request Approval'}</span>
               </button>
             </form>
 

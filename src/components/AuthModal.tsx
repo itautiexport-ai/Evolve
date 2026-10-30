@@ -1,15 +1,13 @@
 import React, { useState } from 'react';
 import type { User } from '../types/goal';
 import { authApi } from '../services/api';
-import { DEFAULT_ADMIN_USER, DEFAULT_REGULAR_USER } from '../data/authData';
-import { ShieldCheck, UserCheck, Key, Lock, Mail, X, Check, Copy, Clock, AlertCircle } from 'lucide-react';
+import { ShieldCheck, Lock, Mail, X, Clock, AlertCircle } from 'lucide-react';
 
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
   onLogin: (user: User) => void;
   currentUser?: User;
-  users?: User[];
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({
@@ -17,13 +15,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onClose,
   onLogin,
   currentUser,
-  users = [],
 }) => {
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isPendingAlert, setIsPendingAlert] = useState(false);
-  const [copiedId, setCopiedId] = useState(false);
   const [loading, setLoading] = useState(false);
 
   if (!isOpen) return null;
@@ -33,74 +29,35 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setError('');
     setIsPendingAlert(false);
 
-    const cleanEmail = email.trim().toLowerCase();
+    const cleanIdentifier = identifier.trim();
     const cleanPassword = password.trim();
 
-    // 1. Check in local users list for pending status
-    const foundUser = users.find(u => 
-      u.email.trim().toLowerCase() === cleanEmail || 
-      u.id.toLowerCase() === cleanEmail
-    );
-
-    if (foundUser) {
-      if (foundUser.password && foundUser.password !== cleanPassword) {
-        setError('Incorrect password. Please verify your credentials.');
-        return;
-      }
-
-      if (foundUser.status === 'pending') {
-        setIsPendingAlert(true);
-        setError(`Account for ${foundUser.email} is pending administrator approval. Please wait for an admin to approve your account before logging in.`);
-        return;
-      }
-
-      if (foundUser.status === 'rejected') {
-        setError('Your registration request was rejected by an administrator.');
-        return;
-      }
-
-      onLogin(foundUser);
-      onClose();
+    if (!cleanIdentifier || !cleanPassword) {
+      setError('Please enter both your User ID / email and password.');
       return;
     }
 
-    // 2. Try authApi if available
     setLoading(true);
     try {
-      const res = await authApi.login(cleanEmail, cleanPassword);
-      if (res?.user?.status === 'pending') {
-        setIsPendingAlert(true);
-        setError(`Account for ${cleanEmail} is pending administrator approval.`);
-        setLoading(false);
-        return;
+      const res = await authApi.login(cleanIdentifier, cleanPassword);
+      if (res?.user) {
+        onLogin(res.user);
+        onClose();
+      } else {
+        throw new Error('Authentication failed.');
       }
-      onLogin(res.user);
-      onClose();
-      return;
-    } catch {
-      // Fall through to demo check
+    } catch (err: any) {
+      if (err.code === 'PENDING_APPROVAL' || (err.status === 403 && String(err.message).toLowerCase().includes('pending'))) {
+        setIsPendingAlert(true);
+        setError('Your account is awaiting approval by an administrator. You will be able to log in once approved.');
+      } else if (err.code === 'ACCOUNT_REJECTED' || (err.status === 403 && String(err.message).toLowerCase().includes('reject'))) {
+        setError('Your account registration was rejected by an administrator.');
+      } else {
+        setError(err.message || 'Invalid User ID / email or password.');
+      }
     } finally {
       setLoading(false);
     }
-
-    // 3. Demo fallback
-    if ((cleanEmail === 'admin@liinexus.com' || cleanEmail === 'admin@lifegoals.com' || cleanEmail === 'admin') && 
-        (cleanPassword === 'admin123' || cleanPassword === 'admin')) {
-      onLogin(DEFAULT_ADMIN_USER);
-      onClose();
-    } else if ((cleanEmail === 'alex@lifegoals.com' || cleanEmail === 'user') && 
-               (cleanPassword === 'user123' || cleanPassword === 'user' || cleanPassword === '')) {
-      onLogin(DEFAULT_REGULAR_USER);
-      onClose();
-    } else {
-      setError('Invalid credentials. Admin: admin@liinexus.com | Pass: admin123');
-    }
-  };
-
-  const copyAdminId = () => {
-    navigator.clipboard.writeText('admin@liinexus.com');
-    setCopiedId(true);
-    setTimeout(() => setCopiedId(false), 2000);
   };
 
   return (
@@ -110,8 +67,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <div className="flex items-center gap-2">
             <ShieldCheck size={26} className="text-accent" />
             <div>
-              <h3>Admin & User Login</h3>
-              <p className="modal-subtitle">Access Admin Control Center & Manage Platform</p>
+              <h3>Account Login</h3>
+              <p className="modal-subtitle">Sign in with your User ID or email and password</p>
             </div>
           </div>
           <button onClick={onClose} className="close-btn" aria-label="Close modal">
@@ -140,56 +97,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </div>
               </div>
 
-              {currentUser.role === 'ADMIN' ? (
-                <span className="text-xs text-accent font-semibold px-2 py-1 bg-accent-light rounded-md">
-                  Active Admin Session
-                </span>
-              ) : (
-                <button
-                  onClick={() => {
-                    onLogin(DEFAULT_ADMIN_USER);
-                    onClose();
-                  }}
-                  className="btn btn-primary btn-sm"
-                >
-                  Switch to Admin
-                </button>
-              )}
+              <span className="text-xs text-accent font-semibold px-2 py-1 bg-accent-light rounded-md">
+                Active Session
+              </span>
             </div>
           </div>
         )}
 
-        {/* Admin Quick Credentials Card */}
-        <div className="admin-credentials-card mb-4">
-          <div className="cred-title flex items-center justify-between">
-            <span className="flex items-center gap-1.5 text-xs font-bold text-accent">
-              <Key size={14} /> Official Admin ID Credentials:
-            </span>
-            <button onClick={copyAdminId} className="copy-btn text-xs">
-              {copiedId ? <Check size={12} className="text-green" /> : <Copy size={12} />}
-              {copiedId ? 'Copied' : 'Copy Admin ID'}
-            </button>
-          </div>
-          <div className="cred-details text-xs">
-            <div><strong>Admin ID / Email:</strong> <code>admin@liinexus.com</code></div>
-            <div><strong>Password:</strong> <code>admin123</code></div>
-            <div><strong>Admin Code:</strong> <code>ADMIN-001</code></div>
-          </div>
-          <button
-            onClick={() => {
-              onLogin(DEFAULT_ADMIN_USER);
-              onClose();
-            }}
-            className="btn btn-accent w-full mt-3 flex items-center justify-center gap-2"
-          >
-            <ShieldCheck size={18} />
-            <span>⚡ Instant One-Click Admin Login</span>
-          </button>
-        </div>
-
-        <div className="divider-or"><span>OR SIGN IN WITH CREDENTIALS</span></div>
-
-        {/* Manual Login Form */}
+        {/* Login Form */}
         <form onSubmit={handleCustomLogin} className="auth-form mt-3">
           {error && (
             <div className={isPendingAlert ? "login-pending-alert mb-3" : "error-banner mb-3"}>
@@ -205,10 +120,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <input
                 type="text"
                 className="form-input with-icon"
-                placeholder="admin@liinexus.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Enter email or User ID"
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
                 required
+                autoComplete="username"
               />
             </div>
           </div>
@@ -224,6 +140,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                autoComplete="current-password"
               />
             </div>
           </div>
@@ -231,13 +148,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <div className="flex gap-2 justify-end">
             <button
               type="button"
-              onClick={() => {
-                onLogin(DEFAULT_REGULAR_USER);
-                onClose();
-              }}
+              onClick={onClose}
               className="btn btn-secondary"
             >
-              <UserCheck size={16} /> Log in as Standard User
+              Cancel
             </button>
             <button type="submit" className="btn btn-primary" disabled={loading}>
               <ShieldCheck size={16} /> {loading ? 'Signing In...' : 'Sign In'}

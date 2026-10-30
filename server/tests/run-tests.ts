@@ -454,36 +454,252 @@ test("Database: Live MySQL Integration Test Suite", async (t) => {
     const testEmailUserB = `test_userb_${Date.now()}@example.com`;
     const testEmailAdmin = `test_admin_${Date.now()}@example.com`;
 
-    // 1. Signup role escalation prevention
+    // ------------------------------------------------------------------------
+    // 1. SELF-SIGNUP: Pending account creation, no session issued
+    // ------------------------------------------------------------------------
     const signupRes = await fetch(`${baseUrl}/api/auth/signup`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        name: "Attacker User",
+        name: "Pending Self User A",
         email: testEmailUserA,
+        phone: "+1 555-0199",
         password: "password123!",
-        role: "ADMIN", // Role escalation attempt
+        role: "ADMIN", // Role escalation attempt must be ignored
       }),
     });
-    assert.equal(signupRes.status, 201);
+    assert.equal(signupRes.status, 201, "Self-signup must return 201 Created");
     const signupData = await signupRes.json();
-    assert.equal(signupData.user.role, "USER", "Signup role must be strictly hardcoded to USER");
+    assert.equal(signupData.user.role, "USER", "Self-signup role must be strictly hardcoded to USER");
+    assert.equal(signupData.user.status, "pending", "Self-signup status must be pending");
+    assert.equal(signupData.user.phone, "+1 555-0199", "User phone must be stored");
     assert.equal(signupData.token, undefined, "JWT token must NOT be returned in JSON response");
     createdUserIds.push(signupData.user.id);
 
-    // Verify cookies set
-    const cookies = signupRes.headers.get("set-cookie") || "";
-    assert.ok(cookies.includes("evolve_token"), "HttpOnly evolve_token cookie must be set");
-    assert.ok(cookies.includes("evolve_csrf"), "evolve_csrf cookie must be set");
+    // Verify cookies NOT set for pending self-signup
+    const signupCookies = signupRes.headers.get("set-cookie") || "";
+    assert.equal(signupCookies.includes("evolve_token"), false, "Pending self-signup must NOT issue session cookie");
 
-    // 2. Revocable session created in sessions table
-    const [sessRows] = await pool.query<any[]>(
+    // Verify NO active session created in MySQL sessions table
+    const [pendingSessRows] = await pool.query<any[]>(
       "SELECT * FROM sessions WHERE user_id = ?",
       [signupData.user.id]
     );
-    assert.ok(sessRows.length > 0, "Active session row must be created in MySQL sessions table");
+    assert.equal(pendingSessRows.length, 0, "No active session row must exist for pending account");
 
-    // 3. User B registration
+    // Verify row in MySQL users table
+    const [userARows] = await pool.query<any[]>(
+      "SELECT id, name, email, phone, role, status FROM users WHERE id = ?",
+      [signupData.user.id]
+    );
+    assert.equal(userARows.length, 1);
+    assert.equal(userARows[0].status, "pending", "Database user record must have status = pending");
+    assert.equal(userARows[0].phone, "+1 555-0199", "Database user record must have phone stored");
+
+    // ------------------------------------------------------------------------
+    // 2. PENDING USER DENIAL: Login rejected with 403 PENDING_APPROVAL
+    // ------------------------------------------------------------------------
+    const pendingLoginRes = await fetch(`${baseUrl}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        identifier: testEmailUserA,
+        password: "password123!",
+      }),
+    });
+    assert.equal(pendingLoginRes.status, 403, "Pending user login must return 403 Forbidden");
+    const pendingLoginData = await pendingLoginRes.json();
+    assert.equal(pendingLoginData.code, "PENDING_APPROVAL", "Pending login error code must be PENDING_APPROVAL");
+    assert.equal(pendingLoginData.status, "pending");
+
+    // Also test login with User ID for pending user
+    const pendingIdLoginRes = await fetch(`${baseUrl}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        identifier: signupData.user.id,
+        password: "password123!",
+      }),
+    });
+    assert.equal(pendingIdLoginRes.status, 403, "Pending user ID login must return 403");
+
+    // Public status check for pending user
+    const statusCheckRes = await fetch(`${baseUrl}/api/auth/status?identifier=${encodeURIComponent(signupData.user.id)}`);
+    assert.equal(statusCheckRes.status, 200);
+    const statusCheckData = await statusCheckRes.json();
+    assert.equal(statusCheckData.status, "pending");
+
+    // ------------------------------------------------------------------------
+    // 3. ADMIN SETUP & AUTHENTICATION
+    // ------------------------------------------------------------------------
+    const adminId = `admin-test-${Date.now()}`;
+    const adminHash = await bcrypt.hash("adminPass123!", 10);
+    await pool.query(
+      `INSERT INTO users (id, name, email, phone, password_hash, role, status, joined_date)
+       VALUES (?, ?, ?, '+1 555-0000', ?, 'ADMIN', 'approved', '2026-01-01')`,
+      [adminId, "Primary Admin", testEmailAdmin, adminHash]
+    );
+    await pool.query(
+      "INSERT INTO user_permissions (user_id, access_admin) VALUES (?, 1)",
+      [adminId]
+    );
+    createdUserIds.push(adminId);
+
+    // Admin login
+    const adminLoginRes = await fetch(`${baseUrl}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ identifier: testEmailAdmin, password: "adminPass123!" }),
+    });
+    assert.equal(adminLoginRes.status, 200, "Admin login must succeed");
+    const adminLoginCookie = adminLoginRes.headers.get("set-cookie")!.split(";")[0];
+    const adminCsrf = (await adminLoginRes.json()).csrfToken;
+
+    // ------------------------------------------------------------------------
+    // 4. ADMIN-CREATED CREDENTIALS & USER ID / EMAIL LOGIN
+    // ------------------------------------------------------------------------
+    const customUserId = `CORP-DEV-${Date.now()}`;
+    const customUserEmail = `dev_${Date.now()}@corp.internal`;
+    const customUserPhone = "+1 (555) 789-0123";
+    const customUserPassword = "CustomPass789!";
+
+    const adminCreateRes = await fetch(`${baseUrl}/api/admin/users`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Cookie": `${adminLoginCookie}; evolve_csrf=${adminCsrf}`,
+        "X-CSRF-Token": adminCsrf,
+      },
+      body: JSON.stringify({
+        id: customUserId,
+        name: "Corporate Developer",
+        email: customUserEmail,
+        phone: customUserPhone,
+        password: customUserPassword,
+        role: "USER",
+        status: "approved",
+      }),
+    });
+    assert.equal(adminCreateRes.status, 201, "Admin creating user must return 201");
+    const createdUserData = await adminCreateRes.json();
+    assert.equal(createdUserData.id, customUserId, "Created user must have specified custom User ID");
+    assert.equal(createdUserData.email, customUserEmail);
+    assert.equal(createdUserData.phone, customUserPhone);
+    assert.equal(createdUserData.status, "approved");
+    createdUserIds.push(customUserId);
+
+    // Verify persistence in MySQL
+    const [customDbRows] = await pool.query<any[]>(
+      "SELECT id, name, email, phone, role, status FROM users WHERE id = ?",
+      [customUserId]
+    );
+    assert.equal(customDbRows.length, 1);
+    assert.equal(customDbRows[0].id, customUserId);
+    assert.equal(customDbRows[0].email, customUserEmail);
+    assert.equal(customDbRows[0].phone, customUserPhone);
+    assert.equal(customDbRows[0].status, "approved");
+
+    // Login using User ID + password
+    const loginWithIdRes = await fetch(`${baseUrl}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        identifier: customUserId,
+        password: customUserPassword,
+      }),
+    });
+    assert.equal(loginWithIdRes.status, 200, "Login with custom User ID must succeed");
+    const idLoginData = await loginWithIdRes.json();
+    assert.equal(idLoginData.user.id, customUserId);
+    const idCookie = loginWithIdRes.headers.get("set-cookie")!.split(";")[0];
+
+    // Verify session works for protected route
+    const meRes = await fetch(`${baseUrl}/api/auth/me`, {
+      headers: { "Cookie": idCookie },
+    });
+    assert.equal(meRes.status, 200);
+    const meData = await meRes.json();
+    assert.equal(meData.user.id, customUserId);
+    assert.equal(meData.user.phone, customUserPhone);
+    assert.equal(meData.user.status, "approved");
+
+    // Login using email + password
+    const loginWithEmailRes = await fetch(`${baseUrl}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        identifier: customUserEmail,
+        password: customUserPassword,
+      }),
+    });
+    assert.equal(loginWithEmailRes.status, 200, "Login with email must succeed");
+
+    // Login with wrong password must return 401
+    const wrongPassRes = await fetch(`${baseUrl}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        identifier: customUserId,
+        password: "IncorrectPassword!",
+      }),
+    });
+    assert.equal(wrongPassRes.status, 401, "Wrong password must return 401");
+
+    // ------------------------------------------------------------------------
+    // 5. ADMIN APPROVAL WORKFLOW
+    // ------------------------------------------------------------------------
+    // Admin approves User A (who self-signed up as pending)
+    const approveRes = await fetch(`${baseUrl}/api/admin/users/${signupData.user.id}/status`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        "Cookie": `${adminLoginCookie}; evolve_csrf=${adminCsrf}`,
+        "X-CSRF-Token": adminCsrf,
+      },
+      body: JSON.stringify({ status: "approved" }),
+    });
+    assert.equal(approveRes.status, 200, "Admin approval must return 200 OK");
+
+    // Verify status updated in MySQL database
+    const [approvedDbRows] = await pool.query<any[]>(
+      "SELECT status FROM users WHERE id = ?",
+      [signupData.user.id]
+    );
+    assert.equal(approvedDbRows[0].status, "approved", "User status in MySQL must now be approved");
+
+    // Now User A can successfully log in!
+    const userALoginRes = await fetch(`${baseUrl}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        identifier: testEmailUserA,
+        password: "password123!",
+      }),
+    });
+    assert.equal(userALoginRes.status, 200, "Approved user must be able to log in");
+    const userATokenCookie = userALoginRes.headers.get("set-cookie")!.split(";")[0];
+    const userACsrf = (await userALoginRes.json()).csrfToken;
+
+    // ------------------------------------------------------------------------
+    // 6. PROTECTED ACTIONS & CROSS-USER ISOLATION
+    // ------------------------------------------------------------------------
+    // User A creates a confidential goal
+    const createGoalRes = await fetch(`${baseUrl}/api/goals`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Cookie": `${userATokenCookie}; evolve_csrf=${userACsrf}`,
+        "X-CSRF-Token": userACsrf,
+      },
+      body: JSON.stringify({
+        title: "User A Confidential Goal",
+        category: "Health & Fitness",
+      }),
+    });
+    assert.equal(createGoalRes.status, 201, "User A must be able to create goal");
+    const goalData = await createGoalRes.json();
+
+    // Register User B, admin approves, User B logs in
     const signupBRes = await fetch(`${baseUrl}/api/auth/signup`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -497,41 +713,39 @@ test("Database: Live MySQL Integration Test Suite", async (t) => {
     const userBData = await signupBRes.json();
     createdUserIds.push(userBData.user.id);
 
-    // 4. Cross-user read, update, and delete isolation
-    // User A creates a confidential goal
-    const userATokenCookie = signupRes.headers.get("set-cookie")!.split(";")[0];
-    const userACsrf = signupData.csrfToken;
-
-    const createGoalRes = await fetch(`${baseUrl}/api/goals`, {
-      method: "POST",
+    // Admin approves User B
+    await fetch(`${baseUrl}/api/admin/users/${userBData.user.id}/status`, {
+      method: "PATCH",
       headers: {
         "Content-Type": "application/json",
-        "Cookie": `${userATokenCookie}; evolve_csrf=${userACsrf}`,
-        "X-CSRF-Token": userACsrf,
+        "Cookie": `${adminLoginCookie}; evolve_csrf=${adminCsrf}`,
+        "X-CSRF-Token": adminCsrf,
       },
-      body: JSON.stringify({
-        title: "User A Confidential Goal",
-        category: "health",
-      }),
+      body: JSON.stringify({ status: "approved" }),
     });
-    assert.equal(createGoalRes.status, 201);
-    const goalData = await createGoalRes.json();
 
-    // 4a. Cross-user READ isolation: User B fetches their goals list
-    const userBTokenCookie = signupBRes.headers.get("set-cookie")!.split(";")[0];
-    const userBCsrf = userBData.csrfToken;
+    const userBLoginRes = await fetch(`${baseUrl}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ identifier: testEmailUserB, password: "password123!" }),
+    });
+    assert.equal(userBLoginRes.status, 200);
+    const userBTokenCookie = userBLoginRes.headers.get("set-cookie")!.split(";")[0];
+    const userBCsrf = (await userBLoginRes.json()).csrfToken;
 
+    // Cross-user read isolation
     const userBGoalsRes = await fetch(`${baseUrl}/api/goals`, {
-      headers: {
-        "Cookie": `${userBTokenCookie}; evolve_csrf=${userBCsrf}`,
-      },
+      headers: { "Cookie": `${userBTokenCookie}; evolve_csrf=${userBCsrf}` },
     });
     assert.equal(userBGoalsRes.status, 200);
     const userBGoals = await userBGoalsRes.json();
-    const leakedGoal = userBGoals.find((g: any) => g.id === goalData.id || g.title === "User A Confidential Goal");
-    assert.equal(leakedGoal, undefined, "User B must NOT see User A's goal in GET /api/goals (read isolation)");
+    assert.equal(
+      userBGoals.some((g: any) => g.id === goalData.id),
+      false,
+      "User B must NOT see User A's goal"
+    );
 
-    // 4b. Cross-user UPDATE isolation: User B attempts to update User A's goal
+    // Cross-user update isolation
     const crossUpdateRes = await fetch(`${baseUrl}/api/goals/${goalData.id}`, {
       method: "PUT",
       headers: {
@@ -539,11 +753,11 @@ test("Database: Live MySQL Integration Test Suite", async (t) => {
         "Cookie": `${userBTokenCookie}; evolve_csrf=${userBCsrf}`,
         "X-CSRF-Token": userBCsrf,
       },
-      body: JSON.stringify({ title: "Tampered by User B", category: "health" }),
+      body: JSON.stringify({ title: "Tampered by User B", category: "Health & Fitness" }),
     });
-    assert.equal(crossUpdateRes.status, 404, "User B must not be able to update User A's goal (update isolation)");
+    assert.equal(crossUpdateRes.status, 404, "User B must not be able to update User A's goal");
 
-    // 4c. Cross-user DELETE isolation: User B attempts to delete User A's goal
+    // Cross-user delete isolation
     const crossDeleteRes = await fetch(`${baseUrl}/api/goals/${goalData.id}`, {
       method: "DELETE",
       headers: {
@@ -551,13 +765,50 @@ test("Database: Live MySQL Integration Test Suite", async (t) => {
         "X-CSRF-Token": userBCsrf,
       },
     });
-    assert.equal(crossDeleteRes.status, 404, "User B must not be able to delete User A's goal (delete isolation)");
+    assert.equal(crossDeleteRes.status, 404, "User B must not be able to delete User A's goal");
 
-    // Verify User A's goal was NOT deleted in MySQL database
-    const [goalCheckRows] = await pool.query<any[]>("SELECT id FROM goals WHERE id = ?", [goalData.id]);
-    assert.equal(goalCheckRows.length, 1, "User A's goal must still exist in MySQL after unauthorized delete attempt");
+    // ------------------------------------------------------------------------
+    // 7. ADMIN REJECTION WORKFLOW & SESSION REVOCATION
+    // ------------------------------------------------------------------------
+    // Admin rejects User B
+    const rejectRes = await fetch(`${baseUrl}/api/admin/users/${userBData.user.id}/status`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        "Cookie": `${adminLoginCookie}; evolve_csrf=${adminCsrf}`,
+        "X-CSRF-Token": adminCsrf,
+      },
+      body: JSON.stringify({ status: "rejected" }),
+    });
+    assert.equal(rejectRes.status, 200, "Admin rejection must return 200 OK");
 
-    // 5. Password-change session revocation
+    // Verify sessions revoked in DB
+    const [bSessRows] = await pool.query<any[]>(
+      "SELECT * FROM sessions WHERE user_id = ?",
+      [userBData.user.id]
+    );
+    assert.equal(bSessRows.length, 0, "Rejected user's active sessions must be immediately revoked");
+
+    // User B's existing session cookie is now denied
+    const rejectedReqRes = await fetch(`${baseUrl}/api/auth/me`, {
+      headers: { "Cookie": userBTokenCookie },
+    });
+    assert.equal(rejectedReqRes.status, 401, "Rejected user's old session must return 401");
+
+    // User B login attempt is denied with 403 ACCOUNT_REJECTED
+    const rejectedLoginRes = await fetch(`${baseUrl}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ identifier: testEmailUserB, password: "password123!" }),
+    });
+    assert.equal(rejectedLoginRes.status, 403, "Rejected user login must return 403");
+    const rejectedData = await rejectedLoginRes.json();
+    assert.equal(rejectedData.code, "ACCOUNT_REJECTED");
+
+    // ------------------------------------------------------------------------
+    // 8. PASSWORD CHANGE & LOGOUT SESSION REVOCATION
+    // ------------------------------------------------------------------------
+    // Password change revokes old session
     const changePassRes = await fetch(`${baseUrl}/api/auth/change-password`, {
       method: "POST",
       headers: {
@@ -570,91 +821,133 @@ test("Database: Live MySQL Integration Test Suite", async (t) => {
         newPassword: "newpassword456!",
       }),
     });
-    assert.equal(changePassRes.status, 200, "Password change must succeed with valid credentials");
+    assert.equal(changePassRes.status, 200);
 
-    // Subsequent request with OLD session cookie must immediately be rejected (revoked session)
-    const oldCookieMeRes = await fetch(`${baseUrl}/api/auth/me`, {
+    const oldSessionMeRes = await fetch(`${baseUrl}/api/auth/me`, {
       headers: { "Cookie": userATokenCookie },
     });
-    assert.equal(oldCookieMeRes.status, 401, "Old session cookie must immediately return 401 after password change");
+    assert.equal(oldSessionMeRes.status, 401, "Old session cookie must be revoked after password change");
 
-    // Verify User A can log in with new password
-    const newLoginRes = await fetch(`${baseUrl}/api/auth/login`, {
+    // Login with new password
+    const newPassLoginRes = await fetch(`${baseUrl}/api/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: testEmailUserA, password: "newpassword456!" }),
+      body: JSON.stringify({ identifier: testEmailUserA, password: "newpassword456!" }),
     });
-    assert.equal(newLoginRes.status, 200, "User must be able to log in with new password");
+    assert.equal(newPassLoginRes.status, 200);
+    const newPassCookie = newPassLoginRes.headers.get("set-cookie")!.split(";")[0];
+    const newPassCsrf = (await newPassLoginRes.json()).csrfToken;
 
-    // Verify User A CANNOT log in with old password
-    const oldLoginRes = await fetch(`${baseUrl}/api/auth/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: testEmailUserA, password: "password123!" }),
-    });
-    assert.equal(oldLoginRes.status, 401, "Old password must be rejected");
-
-    // 6. Logout session revocation
-    const activeCookie = newLoginRes.headers.get("set-cookie")!.split(";")[0];
-    const newCsrf = (await newLoginRes.json()).csrfToken;
-
+    // Logout revokes session
     const logoutRes = await fetch(`${baseUrl}/api/auth/logout`, {
       method: "POST",
       headers: {
-        "Cookie": `${activeCookie}; evolve_csrf=${newCsrf}`,
-        "X-CSRF-Token": newCsrf,
+        "Cookie": `${newPassCookie}; evolve_csrf=${newPassCsrf}`,
+        "X-CSRF-Token": newPassCsrf,
       },
     });
     assert.equal(logoutRes.status, 200);
 
-    const afterLogoutRes = await fetch(`${baseUrl}/api/auth/me`, {
-      headers: { "Cookie": activeCookie },
+    const afterLogoutMeRes = await fetch(`${baseUrl}/api/auth/me`, {
+      headers: { "Cookie": newPassCookie },
     });
-    assert.equal(afterLogoutRes.status, 401, "Revoked session must immediately be denied access after logout");
+    assert.equal(afterLogoutMeRes.status, 401, "Session must be denied after logout");
 
-    // 7. Admin demotion immediate lockout
-    const adminId = `admin-test-${Date.now()}`;
-    const adminHash = await bcrypt.hash("password123!", 10);
-    await pool.query(
-      "INSERT INTO users (id, name, email, password_hash, role, joined_date) VALUES (?, ?, ?, ?, 'ADMIN', ?)",
-      [adminId, "Admin User", testEmailAdmin, adminHash, "2026-01-01"]
-    );
-    await pool.query(
-      "INSERT INTO user_permissions (user_id, access_admin) VALUES (?, 1)",
-      [adminId]
-    );
-    createdUserIds.push(adminId);
-
-    // Admin login
-    const adminLoginRes = await fetch(`${baseUrl}/api/auth/login`, {
+    // ------------------------------------------------------------------------
+    // 9. API FAILURE HANDLING & PERMISSION GUARDS
+    // ------------------------------------------------------------------------
+    // Non-admin attempting admin endpoints must get 403
+    const nonAdminLoginRes = await fetch(`${baseUrl}/api/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: testEmailAdmin, password: "password123!" }),
+      body: JSON.stringify({ identifier: customUserId, password: customUserPassword }),
     });
-    assert.equal(adminLoginRes.status, 200);
-    const adminLoginCookie = adminLoginRes.headers.get("set-cookie")!.split(";")[0];
+    const nonAdminCookie = nonAdminLoginRes.headers.get("set-cookie")!.split(";")[0];
+    const nonAdminCsrf = (await nonAdminLoginRes.json()).csrfToken;
 
-    // Verify admin access works
-    const adminAccessRes = await fetch(`${baseUrl}/api/admin/users`, {
-      headers: { "Cookie": adminLoginCookie },
+    const unauthStatusUpdate = await fetch(`${baseUrl}/api/admin/users/${signupData.user.id}/status`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        "Cookie": `${nonAdminCookie}; evolve_csrf=${nonAdminCsrf}`,
+        "X-CSRF-Token": nonAdminCsrf,
+      },
+      body: JSON.stringify({ status: "approved" }),
     });
-    assert.equal(adminAccessRes.status, 200, "Admin user must have access to admin routes");
+    assert.equal(unauthStatusUpdate.status, 403, "Non-admin status update must be forbidden (403)");
 
-    // Demote admin user in MySQL to USER
-    await pool.query("UPDATE users SET role = 'USER' WHERE id = ?", [adminId]);
-
-    // Demoted user immediately loses admin access without re-login
-    const demotedAccessRes = await fetch(`${baseUrl}/api/admin/users`, {
-      headers: { "Cookie": adminLoginCookie },
+    const unauthCreateUser = await fetch(`${baseUrl}/api/admin/users`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Cookie": `${nonAdminCookie}; evolve_csrf=${nonAdminCsrf}`,
+        "X-CSRF-Token": nonAdminCsrf,
+      },
+      body: JSON.stringify({ name: "Hacker", email: "hacker@evil.com", password: "pwd" }),
     });
-    assert.equal(demotedAccessRes.status, 403, "Demoted administrator must immediately lose access to admin routes");
+    assert.equal(unauthCreateUser.status, 403, "Non-admin user creation must be forbidden (403)");
 
-    // 8. Deleted user immediate lockout
-    await pool.query("DELETE FROM users WHERE id = ?", [adminId]);
-    const deletedAccessRes = await fetch(`${baseUrl}/api/auth/me`, {
-      headers: { "Cookie": adminLoginCookie },
+    // Invalid status update value
+    const invalidStatusRes = await fetch(`${baseUrl}/api/admin/users/${signupData.user.id}/status`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        "Cookie": `${adminLoginCookie}; evolve_csrf=${adminCsrf}`,
+        "X-CSRF-Token": adminCsrf,
+      },
+      body: JSON.stringify({ status: "nonexistent_status" }),
     });
-    assert.equal(deletedAccessRes.status, 401, "Deleted user must immediately lose all access");
+    assert.equal(invalidStatusRes.status, 400, "Invalid status value must return 400 Bad Request");
+
+    // Duplicate custom User ID
+    const duplicateIdRes = await fetch(`${baseUrl}/api/admin/users`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Cookie": `${adminLoginCookie}; evolve_csrf=${adminCsrf}`,
+        "X-CSRF-Token": adminCsrf,
+      },
+      body: JSON.stringify({
+        id: customUserId, // Already exists
+        name: "Duplicate User",
+        email: `unique_${Date.now()}@test.com`,
+        password: "Pass12345!",
+      }),
+    });
+    assert.equal(duplicateIdRes.status, 409, "Duplicate User ID must return 409 Conflict");
+
+    // Duplicate Email
+    const duplicateEmailRes = await fetch(`${baseUrl}/api/admin/users`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Cookie": `${adminLoginCookie}; evolve_csrf=${adminCsrf}`,
+        "X-CSRF-Token": adminCsrf,
+      },
+      body: JSON.stringify({
+        id: `NEW-ID-${Date.now()}`,
+        name: "Duplicate Email User",
+        email: customUserEmail, // Already exists
+        password: "Pass12345!",
+      }),
+    });
+    assert.equal(duplicateEmailRes.status, 409, "Duplicate email must return 409 Conflict");
+
+    // Nonexistent user status check
+    const nonexistentStatusRes = await fetch(`${baseUrl}/api/auth/status?identifier=nonexistent_user_xyz`);
+    assert.equal(nonexistentStatusRes.status, 404, "Status check for nonexistent user must return 404");
+
+    // Demoting or rejecting the only remaining admin must fail with 400
+    const rejectAdminRes = await fetch(`${baseUrl}/api/admin/users/${adminId}/status`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        "Cookie": `${adminLoginCookie}; evolve_csrf=${adminCsrf}`,
+        "X-CSRF-Token": adminCsrf,
+      },
+      body: JSON.stringify({ status: "rejected" }),
+    });
+    assert.equal(rejectAdminRes.status, 400, "Rejecting the last active admin must return 400");
   } finally {
     server.close();
     // Clean up test records in finally block

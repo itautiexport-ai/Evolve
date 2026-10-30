@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import type { Goal, MasterItem, User, JournalEntry } from './types/goal';
 import type { Habit } from './types/habit';
 import { authApi, goalsApi, habitsApi, mastersApi, adminApi, preferencesApi, onSessionExpired, clearAuthToken } from './services/api';
-import { DEFAULT_ADMIN_USER } from './data/authData';
 import { EvolveSidebar } from './components/EvolveSidebar';
 import { EvolveHeader } from './components/EvolveHeader';
 import { EvolveHomePage } from './components/EvolveHomePage';
@@ -140,22 +139,8 @@ export const App: React.FC = () => {
     }
   }, [currentUser]);
 
-  // Users List (Defaults to local storage or fallback, and synced via adminApi for administrators)
-  const [users, setUsers] = useState<User[]>(() => {
-    const saved = localStorage.getItem('evolve_users_v3');
-    if (saved) {
-      try { 
-        const parsed = JSON.parse(saved);
-        return parsed.filter((u: User) => u.id !== 'USER-002').map((u: User) => ({
-          ...u,
-          status: u.status || 'approved',
-        }));
-      } catch (e) { console.error(e); }
-    }
-    return [
-      { ...DEFAULT_ADMIN_USER, name: 'Admin ID', id: 'CRM0001', status: 'approved' }
-    ];
-  });
+  // Users List (Loaded and synced via adminApi for administrators)
+  const [users, setUsers] = useState<User[]>([]);
 
   useEffect(() => {
     if (currentUser?.role === 'ADMIN') {
@@ -535,7 +520,6 @@ export const App: React.FC = () => {
             users={users}
             setUsers={setUsers}
             currentUser={currentUser}
-            onSwitchUser={setCurrentUser}
           />
         ) : activeNav === 'permissions' ? (
           <EvolvePermissionsView
@@ -627,7 +611,6 @@ export const App: React.FC = () => {
           setCurrentUser(user);
           localStorage.setItem(USER_STORAGE, JSON.stringify(user));
         }}
-        users={users}
       />
 
       {/* Reflection Journal Modal */}

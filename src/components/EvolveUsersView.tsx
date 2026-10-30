@@ -23,14 +23,13 @@ interface EvolveUsersViewProps {
   users: User[];
   setUsers: React.Dispatch<React.SetStateAction<User[]>>;
   currentUser: User;
-  onSwitchUser: (user: User) => void;
+  onSwitchUser?: (user: User) => void;
 }
 
 export const EvolveUsersView: React.FC<EvolveUsersViewProps> = ({
   users,
   setUsers,
   currentUser,
-  onSwitchUser,
 }) => {
   const isAdmin = currentUser.role === 'ADMIN';
 
@@ -49,7 +48,7 @@ export const EvolveUsersView: React.FC<EvolveUsersViewProps> = ({
     } else {
       setActiveTab('list');
     }
-  }, [currentUser.id, isAdmin]);
+  }, [currentUser.id, isAdmin, pendingUsers.length]);
 
   // Form State
   const [userId, setUserId] = useState('');
@@ -74,7 +73,7 @@ export const EvolveUsersView: React.FC<EvolveUsersViewProps> = ({
     setEmail(user.email);
     setPhone(user.phone || '');
     setVibeName(user.vibeName || '');
-    setPassword(user.password || '');
+    setPassword('');
     setRole(user.role);
     setStatus(user.status || 'approved');
     setFormError('');
@@ -100,60 +99,56 @@ export const EvolveUsersView: React.FC<EvolveUsersViewProps> = ({
   // One-click Approve User
   const handleApproveUser = async (targetUser: User) => {
     if (!isAdmin) return;
+    setFormError('');
 
     try {
-      if (adminApi && typeof adminApi.updateUser === 'function') {
-        await adminApi.updateUser(targetUser.id, { status: 'approved' }).catch(() => {});
-      }
-    } catch {
-      // fallback to state update
+      await adminApi.updateUserStatus(targetUser.id, 'approved');
+      setUsers(prev => prev.map(u => {
+        if (u.id === targetUser.id) {
+          return {
+            ...u,
+            status: 'approved',
+          };
+        }
+        return u;
+      }));
+
+      // Trigger confetti celebrating approval
+      confetti({
+        particleCount: 60,
+        spread: 60,
+        origin: { y: 0.5 }
+      });
+
+      setSuccessMsg(`Account for "${targetUser.name}" has been approved! The user can now log in.`);
+      setTimeout(() => setSuccessMsg(''), 3500);
+    } catch (err: any) {
+      setFormError(err.message || 'Failed to approve user.');
     }
-
-    setUsers(prev => prev.map(u => {
-      if (u.id === targetUser.id) {
-        return {
-          ...u,
-          status: 'approved',
-        };
-      }
-      return u;
-    }));
-
-    // Trigger confetti celebrating approval
-    confetti({
-      particleCount: 60,
-      spread: 60,
-      origin: { y: 0.5 }
-    });
-
-    setSuccessMsg(`Account for "${targetUser.name}" has been approved! The user can now log in.`);
-    setTimeout(() => setSuccessMsg(''), 3500);
   };
 
   // Reject User
   const handleRejectUser = async (targetUser: User) => {
     if (!isAdmin) return;
+    setFormError('');
 
     if (window.confirm(`Are you sure you want to reject the registration for "${targetUser.name}"?`)) {
       try {
-        if (adminApi && typeof adminApi.updateUser === 'function') {
-          await adminApi.updateUser(targetUser.id, { status: 'rejected' }).catch(() => {});
-        }
-      } catch {
-        // fallback to state update
+        await adminApi.updateUserStatus(targetUser.id, 'rejected');
+        setUsers(prev => prev.map(u => {
+          if (u.id === targetUser.id) {
+            return {
+              ...u,
+              status: 'rejected',
+            };
+          }
+          return u;
+        }));
+        setSuccessMsg(`User registration for "${targetUser.name}" marked as rejected.`);
+        setTimeout(() => setSuccessMsg(''), 3000);
+      } catch (err: any) {
+        setFormError(err.message || 'Failed to reject user.');
       }
-
-      setUsers(prev => prev.map(u => {
-        if (u.id === targetUser.id) {
-          return {
-            ...u,
-            status: 'rejected',
-          };
-        }
-        return u;
-      }));
-      setSuccessMsg(`User registration for "${targetUser.name}" marked as rejected.`);
-      setTimeout(() => setSuccessMsg(''), 3000);
     }
   };
 
@@ -178,20 +173,11 @@ export const EvolveUsersView: React.FC<EvolveUsersViewProps> = ({
     const finalEmail = email.trim() || `${name.trim().toLowerCase().replace(/\s+/g, '')}@lifegoals.com`;
 
     if (editingUser) {
-      // If changing the ID, verify the new ID is not already used by another user
-      if (uppercaseId !== editingUser.id.toUpperCase()) {
-        const isIdTaken = users.some(u => u.id.toUpperCase() === uppercaseId);
-        if (isIdTaken) {
-          setFormError(`User ID "${uppercaseId}" is already taken.`);
-          return;
-        }
-      }
-
       const updatedData: any = {
         name: name.trim(),
         email: finalEmail,
-        phone: phone.trim(),
-        vibeName: vibeName.trim(),
+        phone: phone.trim() || undefined,
+        vibeName: vibeName.trim() || undefined,
         role,
         status,
       };
@@ -200,30 +186,23 @@ export const EvolveUsersView: React.FC<EvolveUsersViewProps> = ({
       }
 
       try {
-        if (adminApi && typeof adminApi.updateUser === 'function') {
-          await adminApi.updateUser(editingUser.id, updatedData).catch(() => {});
-        }
-      } catch {
-        // Continue with local update
+        await adminApi.updateUser(editingUser.id, updatedData);
+      } catch (err: any) {
+        setFormError(err.message || 'Failed to update user.');
+        return;
       }
 
       const updatedUser: User = {
         ...editingUser,
-        id: uppercaseId,
         name: name.trim(),
         email: finalEmail,
-        phone: phone.trim(),
+        phone: phone.trim() || undefined,
         role,
         status,
         vibeName: vibeName.trim() || name.trim().split(' ')[0],
-        password: password.trim() || editingUser.password,
       };
 
       setUsers(prev => prev.map(u => u.id === editingUser.id ? updatedUser : u));
-
-      if (editingUser.id === currentUser.id) {
-        onSwitchUser(updatedUser);
-      }
 
       setSuccessMsg(`User "${name.trim()}" successfully updated!`);
       setEditingUser(null);
@@ -243,40 +222,33 @@ export const EvolveUsersView: React.FC<EvolveUsersViewProps> = ({
 
     } else {
       // Create Mode
-      const isIdTaken = users.some(u => u.id.toUpperCase() === uppercaseId);
-      if (isIdTaken) {
-        setFormError(`User ID "${uppercaseId}" is already taken.`);
+      let createdUser: any;
+      try {
+        createdUser = await adminApi.createUser({
+          id: uppercaseId,
+          name: name.trim(),
+          email: finalEmail,
+          phone: phone.trim() || undefined,
+          password: password.trim(),
+          role,
+          status,
+          vibeName: vibeName.trim() || undefined,
+        });
+      } catch (err: any) {
+        setFormError(err.message || 'Failed to create user account.');
         return;
       }
 
-      try {
-        if (adminApi && typeof adminApi.createUser === 'function') {
-          await adminApi.createUser({
-            id: uppercaseId,
-            name: name.trim(),
-            email: finalEmail,
-            phone: phone.trim(),
-            password: password.trim(),
-            role,
-            status,
-            vibeName: vibeName.trim(),
-          }).catch(() => {});
-        }
-      } catch {
-        // Continue with local creation
-      }
-
       const newUser: User = {
-        id: uppercaseId,
+        id: createdUser?.id || uppercaseId,
         name: name.trim(),
         email: finalEmail,
-        phone: phone.trim(),
+        phone: phone.trim() || undefined,
         role,
         status,
         vibeName: vibeName.trim() || name.trim().split(' ')[0],
-        password: password.trim(),
-        joinedDate: new Date().toISOString().split('T')[0],
-        avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name.trim())}`,
+        joinedDate: createdUser?.joinedDate || new Date().toISOString().split('T')[0],
+        avatar: createdUser?.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name.trim())}`,
         accessMasters: true,
         accessGoals: true,
         accessHabits: true,
@@ -321,16 +293,13 @@ export const EvolveUsersView: React.FC<EvolveUsersViewProps> = ({
 
     if (window.confirm(`Are you sure you want to remove user "${targetName}"?`)) {
       try {
-        if (adminApi && typeof adminApi.deleteUser === 'function') {
-          await adminApi.deleteUser(idToDelete).catch(() => {});
-        }
-      } catch {
-        // Continue with local delete
+        await adminApi.deleteUser(idToDelete);
+        setUsers(prev => prev.filter(u => u.id !== idToDelete));
+        setSuccessMsg(`User "${targetName}" removed from system.`);
+        setTimeout(() => setSuccessMsg(''), 2500);
+      } catch (err: any) {
+        setFormError(err.message || 'Failed to delete user.');
       }
-
-      setUsers(prev => prev.filter(u => u.id !== idToDelete));
-      setSuccessMsg(`User "${targetName}" removed from system.`);
-      setTimeout(() => setSuccessMsg(''), 2500);
     }
   };
 
@@ -730,17 +699,10 @@ export const EvolveUsersView: React.FC<EvolveUsersViewProps> = ({
                               </button>
                             )}
 
-                            {isActiveSession ? (
+                            {isActiveSession && (
                               <span className="active-session-pill">
                                 <UserCheck size={12} /> Active
                               </span>
-                            ) : (
-                              <button
-                                onClick={() => onSwitchUser(user)}
-                                className="btn btn-xs btn-outline-pastel"
-                              >
-                                Switch
-                              </button>
                             )}
                             
                             {/* Actions restricted to Administrators only */}
